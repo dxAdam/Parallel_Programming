@@ -7,7 +7,7 @@
 
 /*
     Compilation:
-        mpicc poissonMPI.c -o poissonMPI -lm -O3
+        mpicc poissonMPI.c vtk.c -o poissonMPI -lm
 */
 
 
@@ -15,7 +15,7 @@
     Program: poissonMPI
 
         Block paritioning Poisson solver that accepts number of processors (np) 
-            and grid dimensions N X M as command line arguments. The number of points
+            and grid dimensions M X N as command line arguments. The number of points
             M and N must be a multiple of the number of processors in the respective direction.
 
 /* 
@@ -67,20 +67,24 @@
        T(x,0) = x             (bottom)
        T(x,1) = x*exp(1)        (top)
 
+    
+    Grid Layout:
 
-       y
-       ^
-     1 |
-       |
-       |
-       |
-       |_ _ _ _ _ _ _ _ _ _> x
-                          2
+        M x N = 5 X 4 
+
+    (0,0)__________ j=N __ x
+        |[0][5][10][15]
+        |[1][6][11][16]
+        |[2][7][12][17]
+        |[3][8][13][18]
+    i=M |[4][9][14][19]
+        |          (5,4)
+        y
+
 
 */
 //    //   //  // ////////////////////////////////////////////////////////////////////////////
 
-//
 
 // define MIN & MAX described above
 double X_MIN = 0;
@@ -264,12 +268,12 @@ void decompose_grid_vert(){
     }
 
     // used with MPI_Cart_create
-    int dim[2], period[2], reorder;
+    int dims, dim[2], period[2], reorder;
     int coord[2], id;
 
     // find dx and dy from boundary conditions and input
-    dx = (X_MAX - X_MIN) / (N);
-    dy = (Y_MAX - Y_MIN) / (M);
+    dx = (X_MAX - X_MIN) / (N-1);
+    dy = (Y_MAX - Y_MIN) / (M-1);
 
     my_N = N / np;
     my_N_min = my_rank*my_N;
@@ -279,7 +283,7 @@ void decompose_grid_vert(){
     my_M_min = 0;
     my_M_max = my_M_min + my_M - 1;
 
-    printf("my_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n"
+    printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
         ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
 
     // now we need to check that my_N*np == N to make sure
@@ -296,8 +300,9 @@ void decompose_grid_vert(){
         }
     }
 
-    dim[0] = 1;
-    dim[1] = np;
+    dims = 2;      // 2D matrix
+    dim[0] = 1;    // rows
+    dim[1] = np;   // cols
     period[0] = period[1] = reorder = 0;
     
     MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
@@ -314,15 +319,15 @@ void calculate_vert_boundaries(double *T, double *T_exact, int my_rank){
     int i,j;
 
     if(my_N_min == 0){  // along left bound
-        for(j = 0; j<my_M+2; j++){
-            T[j*(my_N + 2)] = T_exact[j*N+j*2];
+        for(j = 1; j<my_M+1; j++){
+            T[(my_M+2) + j] = T_exact[j-1];
         }
     }
     
     if(my_N_max == N-1) // along right bound
     {
-        for(j = 0; j<my_M+2; j++){
-            T[j*(my_N+2)+my_N+1] = T_exact[(j+my_M_min+1)*(N+2) - 1];
+        for(j = 1; j < my_M+1; j++){
+            T[(my_M+2)*(my_N)+j] = T_exact[(N-1)*M+j-1];
         }
     }
 }
@@ -336,17 +341,16 @@ int calculate_horz_boundaries(double *T, double *T_exact, int my_rank){
     int i,j;
 
     if(my_M_min == 0){
-        // top
-        for(i = 0; i<my_N+2; i++){
-            T[i] = T_exact[my_N_min + i];
+        // bottom
+        for(i = 1; i<my_N+1; i++){
+            T[(my_M+2)*i + 1] = T_exact[(M)*(i-1)];
         }
     }
 
     if(my_M_max == M-1){
-        // bottom
-
-        for(i = 0; i<my_N+2; i++){
-            T[(my_M+1)*(my_N+2) + i] = T_exact[(M+1)*(N+2) + my_N_min + i];
+        // top
+        for(i = 1; i<my_N+1; i++){
+            T[(my_M+2)*i + my_M] = T_exact[M*i - 1];
         }
     }
 }
@@ -381,53 +385,11 @@ double calculate_max_norm(double *T, double *T_exact,int *i_max, int *j_max){
 
 
 /*
-    copied from provided vtk.c file. Used to generate .vtk file for Paraview visualizer.
+    located in vtk.c
 */
-void VTK_out(const int N, const int M, const double *Xmin, const double *Xmax,
+extern void VTK_out(const int N, const int M, const double *Xmin, const double *Xmax,
              const double *Ymin, const double *Ymax, const double *T,
-             const int index) {
-  // N is number of segments
-
-  unsigned int i, j, k;
-
-  double dx = ((*Xmax) - (*Xmin)) / (N - 1);
-  double dy = ((*Ymax) - (*Ymin)) / (M - 1);
-
-  FILE *fp = NULL;
-  char filename[64];
-  sprintf(filename, "out%d.vtk", index);
-  fp = fopen(filename, "w");
-
-  fprintf(fp, "# vtk DataFile Version 2.0 \n");
-  fprintf(fp, "Grid\n");
-  fprintf(fp, "ASCII\n");
-  fprintf(fp, "DATASET STRUCTURED_GRID\n");
-  fprintf(fp, "DIMENSIONS %d %d %d\n", N, M, 1);
-  fprintf(fp, "POINTS %d float\n", (N) * (M) * (1));
-
-  for (k = 0; k < 1; k++) {
-    for (j = 0; j < M; j++) {
-      for (i = 0; i < N; i++) {
-        fprintf(fp, "%lf %lf %lf\n", (*Xmin) + i * dx, (*Ymin) + j * dy, 0.0);
-      }
-    }
-  }
-  fprintf(fp, "POINT_DATA %d\n", (N) * (M) * (1));
-  fprintf(fp, "SCALARS P float 1\n");
-  fprintf(fp, "LOOKUP_TABLE default\n");
-
-  int cout = 0;
-
-  for (k = 0; k < 1; k++) {
-    for (j = 0; j < M; j++) {
-      for (i = 0; i < N; i++) {
-        fprintf(fp, " %lf\n", T[j * N + i]);
-      }
-    }
-  }
-
-  fclose(fp);
-}
+             const int index);
 
 
 /*
@@ -441,18 +403,20 @@ void initialize_arrays(double **T, double **T_source, double **T_prev, double **
     }
 
     // calculate T_exact using the source function for each entry
-    for(j=0;j<M+2;j++){
-        for(i=0;i<N+2;i++){
-            T_exact[0][j*(N+2) + i] = source_function(X_MIN+i*dx,Y_MIN + j*dy);
+    for(i=0;i<N;i++){
+        for(j=0;j<M;j++){
+            T_exact[0][i*M+j] = source_function(X_MIN+i*dx,Y_MIN + j*dy);
+            //if(i==0)
+            //    T_exact[0][i*M+j] = 6;
         }
     }
 
-    // calculate T_exact using the source function for each entry
-    for(j=0;j<my_M+2;j++){
-        for(i=0;i<my_N+2;i++){
-            T_source[0][j*(my_N+2) + i] = source_function((i+my_N_min)*dx,(j+my_M_min)*dy);
-        }
-    }
+    //// calculate source using the source function for each entry
+    //for(j=0;j<my_M+2;j++){
+    //    for(i=0;i<my_N+2;i++){
+    //        T_source[0][j*(my_N+2) + i] = source_function((i+my_N_min)*dx,(j+my_M_min)*dy);
+    //    }
+    //}
 
 }
 
@@ -467,20 +431,43 @@ double jacobi(double *T, double *T_prev, double *T_source, int M, int N){
         double C = 0.5/(dx*dx+dy*dy);
         double dx2 = dx*dx;
         double dy2 = dy*dy;
+        double dx2dy2 = dx2*dy2;
 
-        // perform iteration
-        for(int j = 1; j < M-1; j++){
-            for(int i = 1; i < N-1; i++){
-                // calculate new T(i,j) -- check report for derivation
-                T[j*N + i] = C*((T[j*N + i-1]+T[j*N + i+1])*dy2 \
-                     + (T[(j+1)*N + i]+T[(j-1)*N + i])*dx2 \
-                        -  T_source[j*N + i]*dx2*dy2); 
-                
+        //// perform iteration
+        //for(int j = 1; j < M-1; j++){
+        //    for(int i = 1; i < N-1; i++){
+        //        // calculate new T(i,j) -- check report for derivation
+        //        T[j*N + i] = C*((T[j*N + i-1]+T[j*N + i+1])*dy2 \
+        //             + (T[(j+1)*N + i]+T[(j-1)*N + i])*dx2 \
+        //                -  T_source[j*N + i]*dx2*dy2); 
+        //        
+        //        
+        //        // calculate T_largest_change
+        //        if(T[j*N+i]-T_prev[j*N+i] > T_largest_change)
+        //        {
+        //            T_largest_change = T[j*N+i]-T_prev[j*N+i];
+        //            if(T_largest_change < 0)
+        //                T_largest_change*(-1);
+        //        }
+        //    }
+        //}
+
+        for(int i=1; i<N-1; i++)
+        {
+            for(int j=1; j<M-1; j++)
+            {
+                // calculate new T(i,j) 
+                T[i*M+j] =  5;//  C*((T_prev[M*i+j-1]                // below
+                              //+   T_prev[M*i+j+1])*dx2           // above
+                              //+  (T_prev[M*(i-1)+j]              // left
+                              //+   T_prev[M*(i+1)+j])*dy2         // right
+                              //-   T_source[M*i+j]*dx2dy2);   
+
                 
                 // calculate T_largest_change
-                if(T[j*N+i]-T_prev[j*N+i] > T_largest_change)
+                if(T[i*M+j]-T_prev[i*M+j] > T_largest_change)
                 {
-                    T_largest_change = T[j*N+i]-T_prev[j*N+i];
+                    T_largest_change = T[i*M+j]-T_prev[i*M+j];
                     if(T_largest_change < 0)
                         T_largest_change*(-1);
                 }
@@ -524,15 +511,13 @@ void swap_columns(double* T){
     Fills an array with a hard-coded value below. Can be used to give matrix a starting
         value or for debugging.     
 */
-void fill_array(double *T, int N, int M){
+void fill_array(double *T, int M, int N){
 
     int i,j;
-    int x = 1;
-    for(i=0; i<M; i++){
-        for(j=0; j<N; j++){
-            T[i*(N) + j] = 2*my_rank+2;
+    for(i=0; i<N; i++){
+        for(j=0; j<M; j++){
+            T[i*M + j] = i*M + j;
         }
-        x++;
     }
 }
 
@@ -540,17 +525,16 @@ void fill_array(double *T, int N, int M){
 /*
     prints a passed array T as a grid. Useful for troubleshooting.
 */
-void print_tables(const int N, const int M, double *T)
+void print_tables(const int M, const int N, double *T)
 {
-
     int i,j;
     double tmp;
 
-    for(j=0;j<=M+1;j++)
+    for(j=0;j<M;j++)
     {
-        for(i=0;i<=N+1;i++)
+        for(i=0;i<N;i++)
         {
-            tmp = T[(M+1)*(i+1) + i - j];
+            tmp = T[(M-1)*(i+1) + i - j];
             printf("%.6f ",tmp);
         }
         printf("\n");
@@ -563,17 +547,16 @@ void print_tables(const int N, const int M, double *T)
     prints all arrays with barriers to prevent buffer collisions
 */
 void print_all(double *T, double *T_exact){
-
     int i;
     for(i=0; i<np; i++){
         MPI_Barrier(com2d);
         if(my_rank == i){
           if(my_rank == 0){
               printf("T_exact:\n");
-              print_tables(N+2, M+2, T_exact);
+              print_tables(M, N, T_exact);
           }
             printf("\n process: %d   my_M: %d\n",i, my_M);
-            print_tables(my_N+2, my_M+2, T);
+            print_tables(my_M+2, my_N+2, T);
         }
     }
 }
@@ -593,7 +576,7 @@ int main (int argc, char* argv[]){
 
     // change from one iteration to next
     double my_largest_change = 0; 
-    double global_largest_change = 2*target_convergence;
+    double global_largest_change = target_convergence + 1;
     int iterations = 0;
 
     // used with MPI_Wtime()
@@ -609,8 +592,8 @@ int main (int argc, char* argv[]){
 
     if(argc < 3){
         if(my_rank==0){
-            printf("\n N M not detcted\n\n");
-            printf("  usage:  mpirun -np <p> poissonMPI <N> <M>  <P> \n");
+            printf("\n M N not detcted\n\n");
+            printf("  usage:  mpirun -np <p> poissonMPI <M> <N>  <P> \n");
             printf("  <p> - number of processors\n  <N> - columns\n  <M> - rows\n"); 
             printf("  <P> - partition method:\n\tV - Vertical\n\tH - Horiztontal\n\tG - 2D Grid\n\n");
             printf("program terminating\n");
@@ -619,8 +602,8 @@ int main (int argc, char* argv[]){
         exit(1);
     }
     else{
-        N = atoi(argv[1]); // number of points along x-axis
-        M = atoi(argv[2]); // number points along y-axis
+        M = atoi(argv[1]); // number of points along x-axis
+        N = atoi(argv[2]); // number points along y-axis
         if(argc < 4){
             if(my_rank == 0)
                 printf("Partition method not detected: Defaulting to Vertical Decomposition\n");
@@ -653,16 +636,16 @@ int main (int argc, char* argv[]){
 
     // declare arrays then call initializing function
     double** T = (double **)malloc(sizeof(*T)*(my_N+2));
-    T[0] = (double *)malloc(sizeof(double)*(my_N+2)*(my_M+2));
+    T[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
 
     double** T_source = (double **)malloc(sizeof(*T_source)*(my_N+2));
-    T_source[0] = (double *)malloc(sizeof(double)*(my_N+2)*(my_M+2));
+    T_source[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
 
     double** T_prev = (double **)malloc(sizeof(*T_prev)*(my_N+2));
-    T_prev[0] = (double *)malloc(sizeof(double)*(my_N+2)*(my_M+2));
+    T_prev[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
 
-    double** T_exact = (double **)malloc(sizeof(*T_exact)*(N+2));
-        T_exact[0] = (double *)malloc(sizeof(double)*(N+2)*(M+2));
+    double** T_exact = (double **)malloc(sizeof(*T_exact)*(N));
+        T_exact[0] = (double *)calloc(sizeof(double)*N*M, sizeof(double));
 
     double** TmpSwp = NULL;
 
@@ -670,7 +653,8 @@ int main (int argc, char* argv[]){
 
 
     // this function can be used to populate the arrays with a starting value if desired
-    //fill_array(T[0], my_N+2, my_M+2);
+    //fill_array(T[0], my_M+2, my_N+2);
+    //fill_array(T_exact[0], M+2, N+2);
 
     if(up == MPI_PROC_NULL || down == MPI_PROC_NULL){
         calculate_horz_boundaries(T[0], T_exact[0], my_rank);
@@ -688,26 +672,29 @@ int main (int argc, char* argv[]){
     //while(iterations < iteration_limit){
     while(global_largest_change > target_convergence && iterations < iteration_limit){
 
-        swap_columns(T[0]);
-        swap_rows(T[0]);
-
-        my_largest_change = jacobi(T[0], T_prev[0], T_source[0], my_M+2, my_N+2);
-
-        //// swap T and T_prev pointers if not first iteration
+       // swap_columns(T[0]);
+       // swap_rows(T[0]);
+//
+       // my_largest_change = jacobi(T[0], T_prev[0], T_source[0], my_M+2, my_N+2);
+//
+       // // swap T and T_prev pointers if not first iteration
         //if(iterations++ > 0)
         //{
         //    TmpSwp = T_prev;
         //    T_prev = T;
         //    T = TmpSwp;
         //}
-
-        MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
+//
+       // MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
+        iterations++;
     }
 
     end_time = MPI_Wtime();
-    
+ 
 
-    //print_all(T[0], T_exact[0]);
+    // print_all(T[0], T_exact[0]);
+    print_tables(my_M+2, my_N+2, T[0]);
+    print_tables(M,N,T_exact[0]);
 
     // generate .vtk files
     VTK_out(my_N+2, my_M+2, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
