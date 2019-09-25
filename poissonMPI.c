@@ -432,32 +432,19 @@ double jacobi(double *T, double *T_prev, double *T_source, int M, int N){
         double dx2 = dx*dx;
         double dy2 = dy*dy;
         double dx2dy2 = dx2*dy2;
-
-        //// perform iteration
-        //for(int j = 1; j < M-1; j++){
-        //    for(int i = 1; i < N-1; i++){
-        //        // calculate new T(i,j) -- check report for derivation
-        //        T[j*N + i] = C*((T[j*N + i-1]+T[j*N + i+1])*dy2 \
-        //             + (T[(j+1)*N + i]+T[(j-1)*N + i])*dx2 \
-        //                -  T_source[j*N + i]*dx2*dy2); 
-        //        
-        //        
-        //        // calculate T_largest_change
-        //        if(T[j*N+i]-T_prev[j*N+i] > T_largest_change)
-        //        {
-        //            T_largest_change = T[j*N+i]-T_prev[j*N+i];
-        //            if(T_largest_change < 0)
-        //                T_largest_change*(-1);
-        //        }
-        //    }
-        //}
-
+        int x = 10;
         for(int i=1; i<N-1; i++)
         {
+            if(i == 0 && my_N_min == 0) i++;
+            if(i == N && my_N_max == N) break;
+
             for(int j=1; j<M-1; j++)
             {
+                if(j == 0 && my_M_min == 0) j++;
+                if(j == M && my_M_max == M) break;
+
                 // calculate new T(i,j) 
-                T[i*M+j] =  5;//  C*((T_prev[M*i+j-1]                // below
+                T[(M+1)*i-i+j] =  x++;;//  C*((T_prev[M*i+j-1]                // below
                               //+   T_prev[M*i+j+1])*dx2           // above
                               //+  (T_prev[M*(i-1)+j]              // left
                               //+   T_prev[M*(i+1)+j])*dy2         // right
@@ -491,7 +478,8 @@ double jacobi(double *T, double *T_prev, double *T_source, int M, int N){
 /*
     swaps rows with neighboring processes defined by MPI_Cart_create in main()  
 */
-void swap_rows(double* T){
+void swap_rows(double* T)
+{
 
     MPI_Sendrecv(&T[(my_N+2)*(my_M)], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
     MPI_Sendrecv(&T[my_N+2], 1, x_vector, down, 1, &T[(my_M+1)*(my_N+2)], 1, x_vector, up, 1, com2d, &status);
@@ -500,7 +488,8 @@ void swap_rows(double* T){
 /*
     swaps columns with neighboring processes defined by MPI_Cart_create in main()  
 */
-void swap_columns(double* T){
+void swap_columns(double* T)
+{
 
     MPI_Sendrecv(&T[my_N], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
     MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N+1], 1, y_vector, right, 1, com2d, &status);
@@ -511,7 +500,8 @@ void swap_columns(double* T){
     Fills an array with a hard-coded value below. Can be used to give matrix a starting
         value or for debugging.     
 */
-void fill_array(double *T, int M, int N){
+void fill_array(double *T, int M, int N)
+{
 
     int i,j;
     for(i=0; i<N; i++){
@@ -546,7 +536,8 @@ void print_tables(const int M, const int N, double *T)
 /*
     prints all arrays with barriers to prevent buffer collisions
 */
-void print_all(double *T, double *T_exact){
+void print_all(double *T, double *T_exact)
+{
     int i;
     for(i=0; i<np; i++){
         MPI_Barrier(com2d);
@@ -562,7 +553,6 @@ void print_all(double *T, double *T_exact){
 }
 
 //
-
 //    //   //  // ////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -670,22 +660,22 @@ int main (int argc, char* argv[]){
 
     // begin Jacobi iterations
     //while(iterations < iteration_limit){
-    while(global_largest_change > target_convergence && iterations < iteration_limit){
-
+    while(global_largest_change > target_convergence && iterations < 1)//iteration_limit)
+    {
        // swap_columns(T[0]);
        // swap_rows(T[0]);
-//
-       // my_largest_change = jacobi(T[0], T_prev[0], T_source[0], my_M+2, my_N+2);
-//
-       // // swap T and T_prev pointers if not first iteration
-        //if(iterations++ > 0)
-        //{
-        //    TmpSwp = T_prev;
-        //    T_prev = T;
-        //    T = TmpSwp;
-        //}
-//
-       // MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
+
+        // swap T and T_prev pointers if not first iteration
+        if(iterations++ > 0)
+        {
+            TmpSwp = T_prev;
+            T_prev = T;
+            T = TmpSwp;
+        }
+
+        my_largest_change = jacobi(T[0], T_prev[0], T_source[0], my_M+2, my_N+2);
+
+        MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
         iterations++;
     }
 
