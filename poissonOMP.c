@@ -4,6 +4,7 @@
 #include <time.h>
 #include <omp.h>
 
+
 /* Compilation:
     gcc -std=c99 poissonOMP.c vtk.c -o poissonOMP -fopenmp -lm
 */
@@ -169,6 +170,7 @@ int main(int argc, char *argv[2])
     
     int iterations_count      = 0;
     int max_iterations        = 1e7;
+    int num_threads;
     double target_convergence = 10e-12;
     double T_largest_change   = target_convergence + 1; // must start greater than target_convergence
 
@@ -187,13 +189,15 @@ int main(int argc, char *argv[2])
 
 
     // calculate T_source using the source function for each entry
-    #pragma omp parallel for
-    for(int i=0;i<N;i++)
+    #pragma omp parallel   
     {
-        for(int j=0;j<M;j++)
-            T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
+    	for(int i=0;i<N;i++)
+    	{
+        	for(int j=0;j<M;j++)
+            	T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
+    	}
+    	num_threads = omp_get_num_threads(); //this must be done in a parallel block
     }
-
 
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
@@ -255,7 +259,8 @@ int main(int argc, char *argv[2])
 
     // determine the max_norm of the difference vectors between T and T_source and print
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
-
+    
+    printf("number of threads: %d\n", num_threads);
     printf("elapsed: %f seconds\n", (double)(stop - start));
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
