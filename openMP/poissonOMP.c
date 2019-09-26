@@ -168,7 +168,7 @@ int main(int argc, char *argv[2])
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
     
     int iterations_count      = 0;
-    int max_iterations        = 1e7;
+    int max_iterations        = 1e6;
     int num_threads;
     double target_convergence = 10e-12;
     double T_largest_change   = target_convergence + 1; // must start greater than target_convergence
@@ -192,18 +192,18 @@ int main(int argc, char *argv[2])
 
 
     // calculate T_source using the source function for each entry
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for(int i=0;i<N;i++)
     {
       	for(int j=0;j<M;j++)
       	T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
-
+    /*
     #pragma omp parallel
     {
     	num_threads = omp_get_num_threads(); //this must be done in a parallel block
     }
-    
+    */
     
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
@@ -212,7 +212,8 @@ int main(int argc, char *argv[2])
     double start = omp_get_wtime();
 
     // Begin Jacobi iterations
-    while(iterations_count<max_iterations && T_largest_change > target_convergence)
+    while(iterations_count<max_iterations && 
+		                  T_largest_change > target_convergence)
     {   
 
         //define constants so we don't need to calculate while iterating
@@ -266,7 +267,7 @@ int main(int argc, char *argv[2])
     // determine the max_norm of the difference vectors between T and T_source and print
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
     
-    printf("number of threads: %d\n", num_threads);
+    //printf("number of threads: %d\n", num_threads);
     printf("elapsed: %f seconds\n", (double)(stop - start));
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
