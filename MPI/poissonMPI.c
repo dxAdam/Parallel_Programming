@@ -7,7 +7,7 @@
 
 /*
     Compilation:
-        mpicc poissonMPI.c vtk.c -o poissonMPI -lm
+        mpicc -std=c99 poissonMPI.c vtk.c -o poissonMPI -lm -O0
 */
 
 
@@ -20,7 +20,7 @@
 
 /* 
     Usage:
-            mpirun -np <p> poissonMPI <N> <M> <P>
+            mpirun -np <p> poissonMPI <N> <M> <P> <I>
 
             <p> - number of processors
 
@@ -28,26 +28,22 @@
 
             <N> - columns
 
-            <P> - partition method:
+            <P> - partition method:  (Optional - defaults to Vertical)
             	    V - Vertical
             	    H - Horiztontal
             	    G - 2D Grid
 
-    Example:
-            mpirun -np 4 poissonMPI 40 80 G
+            <I> - max iterations     (Optional - defaults to 1e6)
 
-        will divide a 40 x 80 matrix evenly among 4 processors in a 2D block pattern
+    Example:
+        
+        mpirun -np 4 poissonMPI 40 80 G
+
+        will divide a 40 x 80 matrix evenly among 4 processors in a 2D block pattern (G)
 
         Note: 40 and 80 can be evenly divided between the processors in each direction. 
             So this is a valid configuration. Each processor will compute a 20x40 grid.
 
-
-    Include integer values for np N and M as command line arguments.
-
-    These will be the dimensions of the 2D grid.
-
-        N = Number of points along x-axis
-        M = Number of points along y-axis
 */
 
 /*
@@ -83,7 +79,7 @@
 
 
 */
-//    //   //  // ////////////////////////////////////////////////////////////////////////////
+//    //   //  // ///////////////////////////////////////////////////////////////////////
 
 
 // define MIN & MAX described above
@@ -314,20 +310,20 @@ void decompose_grid_vert(){
 /*
     populates array with vertical boundary values
 */
-void calculate_vert_boundaries(double *T, double *T_exact, int my_rank){
+void calculate_vert_boundaries(double *T, double *T_source, int my_rank){
     
     int i,j;
 
     if(my_N_min == 0){  // along left bound
         for(j = 1; j<my_M+1; j++){
-            T[(my_M+2) + j] = T_exact[j-1];
+            T[(my_M+2) + j] = T_source[j-1];
         }
     }
     
     if(my_N_max == N-1) // along right bound
     {
         for(j = 1; j < my_M+1; j++){
-            T[(my_M+2)*(my_N)+j] = T_exact[(N-1)*M+j-1];
+            T[(my_M+2)*(my_N)+j] = T_source[(N-1)*M+j-1];
         }
     }
 }
@@ -336,40 +332,56 @@ void calculate_vert_boundaries(double *T, double *T_exact, int my_rank){
 /*
     populates array with horizontal boundary values
 */
-int calculate_horz_boundaries(double *T, double *T_exact, int my_rank){
+int calculate_horz_boundaries(double *T, double *T_source, int my_rank){
 
     int i,j;
 
     if(my_M_min == 0){
         // bottom
         for(i = 1; i<my_N+1; i++){
-            T[(my_M+2)*i + 1] = T_exact[(M)*(i-1)];
+            T[(my_M+2)*i + 1] = T_source[(M)*(i-1)];
         }
     }
 
     if(my_M_max == M-1){
         // top
         for(i = 1; i<my_N+1; i++){
-            T[(my_M+2)*i + my_M] = T_exact[M*i - 1];
+            T[(my_M+2)*i + my_M] = T_source[M*i - 1];
         }
     }
 }
 
 
 /*
-    Calculates and returns the max norm of the difference vectors from T and T_exact.
+    Fills an array with a hard-coded value below. Can be used to give matrix a starting
+        value or for debugging.     
+*/
+void fill_array(double *T, int M, int N)
+{
+    int i,j;
+    for(i=0; i<N; i++){
+        for(j=0; j<M; j++){
+            T[i*M + j] = i*M + j;
+        }
+    }
+}
+
+
+/*
+    Calculates and returns the max norm of the difference vectors from T and T_source.
         Also finds the (x,y) location where the max norm occured.
 */
-double calculate_max_norm(double *T, double *T_exact,int *i_max, int *j_max){
+double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
     double norm, max_norm = 0;
     int i,j;
 
-    for(j=1;j<my_M+1;j++)
+    for(i=0;i<my_N; i++)
     {
-        for(i=1;i<my_N+1;i++){
+        for(j=0;j<my_M;j++){
+
             //calculate the differnece vector and compare to current max
-            norm = T[j*(my_N+2) + i] - T_exact[(j+my_M_min)*(N+2) + i + my_N_min];
-            
+            norm = T[my_M*i + j]  -  T_source[M*(i+my_N_min) + j + my_M_min];
+            //printf("T[]: %f     T_source[]: %f\n", T[M*i + j], T_source[(M)*(i+my_N_min) + my_M_min + j]);
             if(norm < 0)  // get absolute value if negative
                 norm = norm*(-1);
 
@@ -378,9 +390,42 @@ double calculate_max_norm(double *T, double *T_exact,int *i_max, int *j_max){
                 *i_max = i;
                 *j_max = j;
             }
+            
+            //if(i == my_N / 2 && j == my_M / 2)
+            //    printf("max_norm is: %f.4\n", max_norm);
+        }
+        //printf("\n");
+    }
+
+    return max_norm;
+}
+
+
+/*
+     trim the edges off a matrix and return a new one in its place. We need this
+     because the T array is (my_M+2) x (my_N+2) due to ghost cells, but now it
+     will be easier to have T and T_source the same size.
+*/
+double ** trim_matrix_edges(double *T)
+{
+    double**  Tmp = (double **)malloc(sizeof(*Tmp)*my_N);
+    Tmp[0]        = (double *)calloc(sizeof(double)*my_M*my_N, sizeof(double));
+
+    int i, j;
+
+    //fill_array(Tmp[0], my_M, my_N);
+
+    //return Tmp;
+
+    for(i=0;i<=my_N; i++)
+    {
+        for(j=0;j<my_M;j++)
+        {
+            Tmp[0][(my_M+my_M_min)*(my_N_min+i-1) + (j+my_M_min)] =  (T[(my_M+2)*i + 1 + j]);
         }
     }
-    return max_norm;
+    free(T);
+    return Tmp;
 }
 
 
@@ -395,82 +440,20 @@ extern void VTK_out(const int N, const int M, const double *Xmin, const double *
 /*
     Populate arrays with initial values
 */
-void initialize_arrays(double **T, double **T_source, double **T_prev, double **T_exact){
+void initialize_arrays(double **T, double **T_prev, double **T_source)
+{    
     int i,j;
     for(i = 0; i<(my_N+2); i++){
         T[i] = &T[0][i*(my_M+2)];
         T_prev[i] = &T_prev[0][i*(my_M+2)];
     }
 
-    // calculate T_exact using the source function for each entry
+    // calculate T_source using the source function for each entry
     for(i=0;i<N;i++){
         for(j=0;j<M;j++){
-            T_exact[0][i*M+j] = source_function(X_MIN+i*dx,Y_MIN + j*dy);
-            //if(i==0)
-            //    T_exact[0][i*M+j] = 6;
+            T_source[0][i*M+j] = source_function(X_MIN+i*dx,Y_MIN + j*dy);
         }
     }
-
-    //// calculate source using the source function for each entry
-    //for(j=0;j<my_M+2;j++){
-    //    for(i=0;i<my_N+2;i++){
-    //        T_source[0][j*(my_N+2) + i] = source_function((i+my_N_min)*dx,(j+my_M_min)*dy);
-    //    }
-    //}
-
-}
-
-
-/*
-    Performs one Jacobi iteration through matrix   
-*/
-double jacobi(double *T, double *T_prev, double *T_source, int M, int N){
-
-        double T_largest_change = 0;
-
-        double C = 0.5/(dx*dx+dy*dy);
-        double dx2 = dx*dx;
-        double dy2 = dy*dy;
-        double dx2dy2 = dx2*dy2;
-        int x = 10;
-        for(int i=1; i<N-1; i++)
-        {
-            if(i == 0 && my_N_min == 0) i++;
-            if(i == N && my_N_max == N) break;
-
-            for(int j=1; j<M-1; j++)
-            {
-                if(j == 0 && my_M_min == 0) j++;
-                if(j == M && my_M_max == M) break;
-
-                // calculate new T(i,j) 
-                T[(M+1)*i-i+j] =  x++;;//  C*((T_prev[M*i+j-1]                // below
-                              //+   T_prev[M*i+j+1])*dx2           // above
-                              //+  (T_prev[M*(i-1)+j]              // left
-                              //+   T_prev[M*(i+1)+j])*dy2         // right
-                              //-   T_source[M*i+j]*dx2dy2);   
-
-                
-                // calculate T_largest_change
-                if(T[i*M+j]-T_prev[i*M+j] > T_largest_change)
-                {
-                    T_largest_change = T[i*M+j]-T_prev[i*M+j];
-                    if(T_largest_change < 0)
-                        T_largest_change*(-1);
-                }
-            }
-        }
-
-
-        for(int j = 1; j < M-1; j++){
-            for(int i = 1; i < N-1; i++){
-                //T_largest_change = fmax( fabs(T[j*N+i]-T_prev[j*N+i]), T_largest_change);
-                T_prev[j*N + i] = T[j*N + i];
-            }
-        }
-
-
-    return T_largest_change;
 }
 
 
@@ -480,7 +463,6 @@ double jacobi(double *T, double *T_prev, double *T_source, int M, int N){
 */
 void swap_rows(double* T)
 {
-
     MPI_Sendrecv(&T[(my_N+2)*(my_M)], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
     MPI_Sendrecv(&T[my_N+2], 1, x_vector, down, 1, &T[(my_M+1)*(my_N+2)], 1, x_vector, up, 1, com2d, &status);
 }
@@ -490,26 +472,10 @@ void swap_rows(double* T)
 */
 void swap_columns(double* T)
 {
-
     MPI_Sendrecv(&T[my_N], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
     MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N+1], 1, y_vector, right, 1, com2d, &status);
 }
 
-
-/*
-    Fills an array with a hard-coded value below. Can be used to give matrix a starting
-        value or for debugging.     
-*/
-void fill_array(double *T, int M, int N)
-{
-
-    int i,j;
-    for(i=0; i<N; i++){
-        for(j=0; j<M; j++){
-            T[i*M + j] = i*M + j;
-        }
-    }
-}
 
 
 /*
@@ -524,8 +490,12 @@ void print_tables(const int M, const int N, double *T)
     {
         for(i=0;i<N;i++)
         {
+            //double * tmp;
+            //tmp = &T[(M-1)*(i+1) + i - j];
+            //printf("  %p  " , tmp);          // prints address
+
             tmp = T[(M-1)*(i+1) + i - j];
-            printf("%.6f ",tmp);
+            printf("%.6f ", tmp);
         }
         printf("\n");
     }
@@ -536,15 +506,15 @@ void print_tables(const int M, const int N, double *T)
 /*
     prints all arrays with barriers to prevent buffer collisions
 */
-void print_all(double *T, double *T_exact)
+void print_all(double *T, double *T_source)
 {
     int i;
     for(i=0; i<np; i++){
         MPI_Barrier(com2d);
         if(my_rank == i){
           if(my_rank == 0){
-              printf("T_exact:\n");
-              print_tables(M, N, T_exact);
+              printf("T_source:\n");
+              print_tables(M, N, T_source);
           }
             printf("\n process: %d   my_M: %d\n",i, my_M);
             print_tables(my_M+2, my_N+2, T);
@@ -552,29 +522,80 @@ void print_all(double *T, double *T_exact)
     }
 }
 
+
+/*
+    Performs one Jacobi iteration through matrix   
+*/
+double jacobi(double *T, double *T_prev, double *T_source)
+{
+
+        double T_largest_change = 0;
+
+        double C = 0.5/(dx*dx+dy*dy);
+        double dx2 = dx*dx;
+        double dy2 = dy*dy;
+        double dx2dy2 = dx2*dy2;
+
+        //fill_array(&T[0], my_M+2, my_N+2);
+        int x = 1;
+        for(int i=1; i<my_N+2; i++)
+        {
+            // check if this processor is against the left or right boundary
+            if(left == MPI_PROC_NULL && i==1) i++;
+            if(right == MPI_PROC_NULL && i==my_N) break;
+
+            for(int j=1; j<my_M+2; j++)
+            {
+                // check if this processor is a agaist the top or bottom boundary 
+                if(down == MPI_PROC_NULL && j==1) j++;
+                if(up == MPI_PROC_NULL && j==my_M) break;
+                
+                    // calculate new T(i,j) 
+                    T[(my_M+2)*i + j] =  C*((T_prev[(my_M+2)*i +j-1]              // below
+                                        +   T_prev[(my_M+2)*i+j+1])*dx2           // above
+                                        +  (T_prev[(my_M+2)*(i-1)+j]              // left
+                                        +   T_prev[(my_M+2)*(i+1)+j])*dy2         // right
+                                        -   T_source[M*i+j]*dx2dy2);   
+
+
+                    // calculate T_largest_change
+                    if(T[(my_M+1)*i + j - 1]-T_prev[(my_M+1)*i + j - 1] > T_largest_change)
+                    {
+                        T_largest_change = T[(my_M+1)*i + j - 1]-T_prev[(my_M+1)*i + j - 1];
+                        if(T_largest_change < 0)
+                            T_largest_change*(-1);
+                    }
+            x++;
+            }
+        }
+
+    return T_largest_change;
+}
+
+
 //
 //    //   //  // ////////////////////////////////////////////////////////////////////////////////////////////
 
 
 int main (int argc, char* argv[]){
 
-    double target_convergence = 10e-12;
+    int iteration_limit          = 1e6;
+    int iterations               = 0;
+    double target_convergence    = 10e-12;
 
     // infinity norm of processed matrix
-    double my_max_norm = 0;
-    double global_max_norm = 0;
+    double my_max_norm           = 0;
+    double global_max_norm       = 0;
 
     // change from one iteration to next
-    double my_largest_change = 0; 
-    double global_largest_change = target_convergence + 1;
-    int iterations = 0;
+    double my_largest_change     = 0; 
+    double global_largest_change = target_convergence + 1; //needs to be > than global to iterate
 
     // used with MPI_Wtime()
     double start_time, end_time;
 
     char partition_method; // read from command line
-    
-    int iteration_limit = 10000000;
+
 
     MPI_Init(&argc,&argv);
     MPI_Comm_rank(MPI_COMM_WORLD,&my_rank);
@@ -624,84 +645,98 @@ int main (int argc, char* argv[]){
     MPI_Type_commit(&x_vector);
     MPI_Type_commit(&y_vector);
 
-    // declare arrays then call initializing function
-    double** T = (double **)malloc(sizeof(*T)*(my_N+2));
-    T[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
-
-    double** T_source = (double **)malloc(sizeof(*T_source)*(my_N+2));
-    T_source[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
-
     double** T_prev = (double **)malloc(sizeof(*T_prev)*(my_N+2));
-    T_prev[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
+        T_prev[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
+    
+    // declare arrays then call initializing function
+    double** T            = (double **)malloc(sizeof(*T)*(my_N+2));
+    T[0]                  = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
+    
+    double** T_source     = (double **)malloc(sizeof(*T_source)*(N));
+    T_source[0]           = (double *)calloc(sizeof(double)*N*M, sizeof(double));
+    
+    double* TmpSwp        = NULL;
 
-    double** T_exact = (double **)malloc(sizeof(*T_exact)*(N));
-        T_exact[0] = (double *)calloc(sizeof(double)*N*M, sizeof(double));
 
-    double** TmpSwp = NULL;
-
-    initialize_arrays(T, T_source, T_prev, T_exact);
-
+    initialize_arrays(T, T_prev, T_source);
 
     // this function can be used to populate the arrays with a starting value if desired
     //fill_array(T[0], my_M+2, my_N+2);
-    //fill_array(T_exact[0], M+2, N+2);
+    //fill_array(T_source[0], M+2, N+2);
 
     if(up == MPI_PROC_NULL || down == MPI_PROC_NULL){
-        calculate_horz_boundaries(T[0], T_exact[0], my_rank);
+        calculate_horz_boundaries(T[0], T_source[0], my_rank);
+        calculate_horz_boundaries(T_prev[0], T_source[0], my_rank);
     }
 
     if(left == MPI_PROC_NULL || right == MPI_PROC_NULL){
-        calculate_vert_boundaries(T[0], T_exact[0], my_rank);
+        calculate_vert_boundaries(T[0], T_source[0], my_rank);
+        calculate_vert_boundaries(T_prev[0], T_source[0], my_rank);
     }
 
+    //printf("T:\n");
+    //print_tables(my_M+2, my_N+2, T[0]);
 
- 
     start_time = MPI_Wtime();
-
     // begin Jacobi iterations
-    //while(iterations < iteration_limit){
-    while(global_largest_change > target_convergence && iterations < 1)//iteration_limit)
+    while(iterations < iteration_limit)// && global_largest_change > target_convergence )
     {
-       // swap_columns(T[0]);
-       // swap_rows(T[0]);
+        // swap_columns(T[0]);
+        // swap_rows(T[0]);
 
         // swap T and T_prev pointers if not first iteration
         if(iterations++ > 0)
         {
-            TmpSwp = T_prev;
-            T_prev = T;
-            T = TmpSwp;
+            TmpSwp = T_prev[0];
+            T_prev[0] = T[0];
+            T[0] = TmpSwp;
         }
 
-        my_largest_change = jacobi(T[0], T_prev[0], T_source[0], my_M+2, my_N+2);
+        my_largest_change = jacobi(T[0], T_prev[0], T_source[0]);
 
-        MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
-        iterations++;
+        if(np == 1)
+            global_largest_change = my_largest_change;
+        else
+            MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
     }
 
     end_time = MPI_Wtime();
- 
-
-    // print_all(T[0], T_exact[0]);
+    printf("T:\n");
     print_tables(my_M+2, my_N+2, T[0]);
-    print_tables(M,N,T_exact[0]);
 
-    // generate .vtk files
-    VTK_out(my_N+2, my_M+2, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
+    T = trim_matrix_edges(T[0]);  //padding exists on all sides of the matrix due to ghost layers
+
+   // printf("T_prev:\n");
+   // print_tables(my_M, my_N, T_prev[0]);
+  
+    printf("T:\n");
+    print_tables(my_M, my_N, T[0]);
+
+    printf("T_Source:\n");
+    print_tables(M,N,T_source[0]);
 
     int i,j; //used to retrieve max norm position
-    my_max_norm = calculate_max_norm(T[0],T_exact[0],&i,&j);    
-    MPI_Allreduce(&my_max_norm, &global_max_norm, 1, MPI_DOUBLE, MPI_MAX, com2d);
+    
+    my_max_norm = calculate_max_norm(T[0],T_source[0], &i,&j);    
+    
+    if(np == 1)
+        global_max_norm = my_max_norm;
+    else
+        MPI_Allreduce(&my_max_norm, &global_max_norm, 1, MPI_DOUBLE, MPI_MAX, com2d);
+
 
     // print max_norm and cleanup messages
     if(my_rank == 0){
-        printf("max_norm: %.12e   time: %fs   iterations: %d\n",global_max_norm, end_time - start_time, iterations);
+        printf("max_norm: %.12e at (%d, %d)\ntime: %fs\niterations: %d\n",global_max_norm, i, j, end_time - start_time, iterations);
     }
+    
 
+    //// generate .vtk files
+    //VTK_out(my_N, my_M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
+//
     free(T);
-    free(T_source);
     free(T_prev);
-    free(T_exact);
+    free(T_source);
 
     MPI_Finalize();
     return(0);
