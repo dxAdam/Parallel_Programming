@@ -11,10 +11,7 @@
 
 /* Usage:
 
-    set number of threads in shell with 
-        export OMP_NUM_THREADS=<num_threads>
-
-   ./poissonMP <M> <N>
+   ./poissonMP <M> <N> <np>
 
     Include integer values for M and N as command line arguments.
 
@@ -22,6 +19,8 @@
 
         M = Number of points along y-axis (rows)
         N = Number of points along x-axis (columns)
+       np = Number of threads (Optional)
+
 */
 
 /*
@@ -178,6 +177,10 @@ int main(int argc, char *argv[2])
     double dx                 = (X_MAX - X_MIN) / (N-1);
     double dy                 = (Y_MAX - Y_MIN) / (M-1);
 
+    if(argv[3])
+	    omp_set_num_threads(atoi(argv[3]));
+
+
     // prepare arrays to hold calculated , exact, and previous array values
     double * T                = NULL;
     double * T_prev           = NULL;
@@ -189,16 +192,19 @@ int main(int argc, char *argv[2])
 
 
     // calculate T_source using the source function for each entry
-    #pragma omp parallel   
+    #pragma omp parallel for
+    for(int i=0;i<N;i++)
     {
-    	for(int i=0;i<N;i++)
-    	{
-        	for(int j=0;j<M;j++)
-            	T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
-    	}
-    	num_threads = omp_get_num_threads(); //this must be done in a parallel block
+      	for(int j=0;j<M;j++)
+      	T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
 
+    #pragma omp parallel
+    {
+    	num_threads = omp_get_num_threads(); //this must be done in a parallel block
+    }
+    
+    
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
     calculate_boundaries(M,N,T_prev,dx,dy);
