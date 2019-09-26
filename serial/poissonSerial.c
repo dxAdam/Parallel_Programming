@@ -5,7 +5,7 @@
 #include "openacc.h"
 
 /* Compilation:
-    gcc poissonSerial.c vtk.c -o poissonSerial -lm -O3
+    gcc poissonSerial.c vtk.c -o poissonSerial -lm
 */
 
 /* Usage:
@@ -42,7 +42,7 @@
         M x N = 5 X 4 
 
     (0,0)__________ j=N __ x    When we print, we mirror the x-axis so the
-        |[0][5][10][15]                 plot appears with (5,4) on the top right corner
+        |[0][5][10][15]         plot appears with (5,4) on the top right corner
         |[1][6][11][16]
         |[2][7][12][17]
         |[3][8][13][18]
@@ -51,7 +51,7 @@
         y                        
 
 */
-// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
+// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 
 // define MIN & MAX described above
 double X_MIN = 0;
@@ -165,7 +165,7 @@ int main(int argc, char *argv[2])
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
     
     int iterations_count      = 0;
-    int max_iterations        = 1e7;
+    int max_iterations        = 1e6;
     double target_convergence = 10e-12;
     double T_largest_change   = target_convergence + 1; // must start greater than target_convergence
 
@@ -201,7 +201,8 @@ int main(int argc, char *argv[2])
 
 
     // Begin Jacobi iterations
-    while(iterations_count<max_iterations && T_largest_change > target_convergence)
+    while(iterations_count<max_iterations &&
+		                  T_largest_change > target_convergence)
     {   
 
         //define constants so we don't need to calculate while iterating
@@ -232,7 +233,10 @@ int main(int argc, char *argv[2])
                               +   T_prev[M*(i+1)+j])*dy2         // right
                               -   T_source[M*i+j]*dx2dy2);   
 
-                
+               
+//		T_largest_change = fmax(fabs(T[M*i+j]-T_prev[M*i+j]), T_largest_change);
+
+	        	
                 // calculate T_largest_change
                 if(T[i*M+j]-T_prev[i*M+j] > T_largest_change)
                 {
