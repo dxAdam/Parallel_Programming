@@ -84,7 +84,6 @@ double source_function(double x, double y)
 */
 void print_table(const int M, const int N, double *T)
 {
-
     int i,j;
     double tmp;
 
@@ -108,9 +107,6 @@ void print_table(const int M, const int N, double *T)
 */
 void calculate_boundaries(const int M, const int N, double *T, double dx, double dy)
 {
-
-    #pragma acc data copyin(T[0:M*N]) copyout(T[0:N*M])
-
     for(int i=0; i < N; i++)
     {
         // bottom
@@ -187,15 +183,11 @@ int main(int argc, char *argv[2])
     T_source                  = (double *)calloc(M*N + 2, sizeof(double));
 
 
-
-#pragma acc data copyin(T_source[0:M*N]) copyout(T_source[0:N*M])
 {
     // calculate T_source using the source function for each entry
-    #pragma acc parallel loop gang
 
     for(int i=0;i<N;i++)
     {
-        //#pragma acc loop vector
         for(int j=0;j<M;j++)
             T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
@@ -208,8 +200,6 @@ int main(int argc, char *argv[2])
     clock_t start = clock();
 
 
-//#pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
-//{
     // Begin Jacobi iterations
     while(iterations_count<max_iterations && T_largest_change > target_convergence)
     {   
@@ -231,10 +221,8 @@ int main(int argc, char *argv[2])
         // reset largest change for this iteration
         T_largest_change = 0;
           
-        #pragma acc parallel loop gang
         for(int i=1; i<N-1; i++)
         {
-            #pragma acc loop vector
             for(int j=1; j<M-1; j++)
             {
                 // calculate new T(i,j) 
@@ -255,7 +243,6 @@ int main(int argc, char *argv[2])
             }
         }
     }
-//}
 
     clock_t stop = clock();
 
@@ -270,13 +257,13 @@ int main(int argc, char *argv[2])
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
 
-
+/*
     printf("T:\n");
     print_table(M,N,T);
 
     printf("T_source:\n");
     print_table(M,N,T_source);
-    
+*/  
 
     // generate paraview .vtk file
     VTK_out(M, N, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, 0);

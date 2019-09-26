@@ -209,8 +209,8 @@ int main(int argc, char *argv[2])
     clock_t start = clock();
 
 
-//#pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
-//{
+#pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
+{
     // Begin Jacobi iterations
     while(iterations_count<max_iterations && T_largest_change > target_convergence)
     {   
@@ -256,7 +256,7 @@ int main(int argc, char *argv[2])
             }
         }
     }
-//}
+}
 
     clock_t stop = clock();
 
