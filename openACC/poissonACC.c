@@ -4,13 +4,18 @@
 #include <time.h>
 #include "openacc.h"
 
+/* For multicore, set number of cores from the shell with
+     export ACC_NUM_CORES=<N>
+*/
+
 /* Compilation:
-    Serial: gcc poissonACC.c -o poissonACC -lm
-    Parallel: pgcc -acc -Minfo -ta=tesla:cuda9.1 -fast -O3 poissonACC.c -o poissonACC
+    serial:        gcc poissonACC.c vtk.c -lm -o poissonACC_serial
+    parallel cuda: pgcc -acc -Minfo -ta=tesla poissonACC.c vtk.c -o poissonACC_CUDA
+    parallel cpu:  pgcc -acc -Minfo -ta=multicore poissonACC.c vtk.c -o poissonACC_cpu
 */
 
 /* Usage:
-   ./poissonACC <M> <N>
+   ./poissonSerial <M> <N> 
 
     Include integer values for M and N as command line arguments.
 
@@ -43,7 +48,7 @@
         M x N = 5 X 4 
 
     (0,0)__________ j=N __ x    When we print, we mirror the x-axis so the
-        |[0][5][10][15]                 plot appears with (5,4) on the top right corner
+        |[0][5][10][15]             plot appears with (5,4) on the top right corner
         |[1][6][11][16]
         |[2][7][12][17]
         |[3][8][13][18]
@@ -52,7 +57,7 @@
         y                        
 
 */
-// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
+// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 
 // define MIN & MAX described above
 double X_MIN = 0;
@@ -85,7 +90,6 @@ double source_function(double x, double y)
 */
 void print_table(const int M, const int N, double *T)
 {
-
     int i,j;
     double tmp;
 
@@ -108,10 +112,8 @@ void print_table(const int M, const int N, double *T)
         The dx and dy scaling factors are applied here.
 */
 void calculate_boundaries(const int M, const int N, double *T, double dx, double dy)
-{
-
-    #pragma acc data copyin(T[0:M*N]) copyout(T[0:N*M])
-
+{   
+    //#pragma acc data copyin(T[0:M*N]) copyout(T[0:N*M]) 
     for(int i=0; i < N; i++)
     {
         // bottom
@@ -140,9 +142,9 @@ double calculate_max_norm(const int M,const int N, double *T,
 {
     double norm, max_norm = 0;
 
-    for(int i=1;i<N;i++)
+    for(int i=1;i<N-1;i++)
     {
-        for(int j=1;j<M;j++)
+        for(int j=1;j<M-1;j++)
         {
             //calculate the differnece vector and compare to current max
             norm = T[i*M+j] - T_source[i*M+j];
@@ -170,7 +172,7 @@ int main(int argc, char *argv[2])
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
     
     int iterations_count      = 0;
-    int max_iterations        = 1e7;
+    int max_iterations        = 1e6;
     double target_convergence = 10e-12;
     double T_largest_change   = target_convergence + 1; // must start greater than target_convergence
 
@@ -179,28 +181,24 @@ int main(int argc, char *argv[2])
     double dy                 = (Y_MAX - Y_MIN) / (M-1);
 
     // prepare arrays to hold calculated , exact, and previous array values
-    double * T                = NULL;
-    double * T_prev           = NULL;
-    double * TmpSwp           = NULL;  // used to swap T and T_prev pointers
-    double *restrict T_source = NULL;
+    double * __restrict__ T                = NULL;
+    double * __restrict__ T_prev           = NULL;
+    double * __restrict__ T_source         = NULL;
     T                         = (double *)calloc(M*N + 2, sizeof(double));
     T_prev                    = (double *)calloc(M*N + 2, sizeof(double));
     T_source                  = (double *)calloc(M*N + 2, sizeof(double));
 
-
-
-#pragma acc data copyin(T_source[0:M*N]) copyout(T_source[0:N*M])
-{
+//#pragma acc data copyin(T_source[0:M*N]) copyout(T_source[0:N*M])
+//{
     // calculate T_source using the source function for each entry
-    #pragma acc parallel loop gang
-
+    //#pragma acc parallel loop gang
     for(int i=0;i<N;i++)
     {
-        //#pragma acc loop vector
+	//#pragma acc loop vector
         for(int j=0;j<M;j++)
             T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
-}
+//}
 
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
@@ -208,34 +206,25 @@ int main(int argc, char *argv[2])
 
     clock_t start = clock();
 
-
 #pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
 {
     // Begin Jacobi iterations
-    while(iterations_count<max_iterations && T_largest_change > target_convergence)
+    while(iterations_count++ < max_iterations && 
+		                 T_largest_change > target_convergence)
     {   
-
         //define constants so we don't need to calculate while iterating
         double    dx2 = dx*dx;
         double    dy2 = dy*dy;
         double      C = 0.5/(dx2+dy2);
         double dx2dy2 = dx2*dy2;
 
-        // swap T and T_prev pointers if not first iteration
-        if(iterations_count++ > 0)
-        {
-            TmpSwp = T_prev;
-            T_prev = T;
-            T = TmpSwp;
-        }
-
         // reset largest change for this iteration
         T_largest_change = 0;
-          
+        
         #pragma acc parallel loop gang
         for(int i=1; i<N-1; i++)
         {
-            #pragma acc loop vector
+	    #pragma acc loop vector
             for(int j=1; j<M-1; j++)
             {
                 // calculate new T(i,j) 
@@ -243,21 +232,26 @@ int main(int argc, char *argv[2])
                               +   T_prev[M*i+j+1])*dx2           // above
                               +  (T_prev[M*(i-1)+j]              // left
                               +   T_prev[M*(i+1)+j])*dy2         // right
-                              -   T_source[M*i+j]*dx2dy2);   
-
+                              -   T_source[M*i+j]*dx2dy2);
                 
-                // calculate T_largest_change
-                if(T[i*M+j]-T_prev[i*M+j] > T_largest_change)
-                {
-                    T_largest_change = T[i*M+j]-T_prev[i*M+j];
-                    if(T_largest_change < 0)
-                        T_largest_change*(-1);
-                }
+            } 
+             
+	    
+        }
+
+        // copy T to T_prev
+        #pragma acc parallel loop gang
+        for(int i = 1; i < N-1; i++)
+	{
+            #pragma acc loop vector
+            for(int j = 1; j < N-1; j++)
+	    {
+                T_largest_change = fmax( fabs(T[M*i+j]-T_prev[M*i+j]), T_largest_change);
+                T_prev[M*i+j] = T[M*i+j];
             }
         }
     }
 }
-
     clock_t stop = clock();
 
     int i_max;
@@ -271,13 +265,13 @@ int main(int argc, char *argv[2])
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
 
-    /*
+/*
     printf("T:\n");
     print_table(M,N,T);
 
     printf("T_source:\n");
     print_table(M,N,T_source);
-    */
+  */
 
     // generate paraview .vtk file
     VTK_out(M, N, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, 0);
