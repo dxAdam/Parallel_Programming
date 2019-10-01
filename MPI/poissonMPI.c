@@ -223,8 +223,8 @@ void decompose_grid_horz(){
     int coord[2], id;
 
     // find dx and dy from boundary conditions and input
-    dx = (X_MAX - X_MIN) / (N);
-    dy = (Y_MAX - Y_MIN) / (M);
+    dx = (X_MAX - X_MIN) / (N+1);
+    dy = (Y_MAX - Y_MIN) / (M+1);
 
     my_N = N;
     my_N_min = 0;
@@ -465,8 +465,8 @@ void initialize_arrays(double **T, double **T_prev, double **T_source)
 */
 void swap_rows(double* T)
 {                                               //dest                      //source
-    MPI_Sendrecv(&T[my_N*my_M-2*my_M], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
-    MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);
+    MPI_Sendrecv(&T[my_M-2], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
+    MPI_Sendrecv(&T[1], 1, x_vector, down, 1, &T[my_M-1], 1, x_vector, up, 1, com2d, &status);
 }
 
 /*
@@ -638,7 +638,7 @@ int main (int argc, char* argv[]){
     //    ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
 
     // declare type vectors for ghost rows and columns
-    MPI_Type_vector(my_N, 1, my_N, MPI_DOUBLE, &x_vector);
+    MPI_Type_vector(my_N, 1, my_M, MPI_DOUBLE, &x_vector);
     MPI_Type_vector(my_M, my_M, 1, MPI_DOUBLE, &y_vector);
     MPI_Type_commit(&x_vector);
     MPI_Type_commit(&y_vector);
@@ -675,7 +675,7 @@ int main (int argc, char* argv[]){
     while(iterations < iteration_limit && global_largest_change > target_convergence )
     {
         swap_columns(T[0]);
-        //swap_rows(T[0]);
+        swap_rows(T[0]);
 
         // swap T and T_prev pointers if not first iteration
         if(iterations++ > 0)
@@ -703,16 +703,6 @@ int main (int argc, char* argv[]){
 
     //print_all(T[0], T_source[0]);
 
-/*
-    printf("T_prev:\n");
-    print_tables(T_prev[0]);
-  
-    printf("T:\n");
-    print_tables(T[0]);
-
-    printf("T_Source:\n");
-    print_tables(T_source[0]);
-*/
     int i,j; //used to retrieve max norm position
     
     my_max_norm = calculate_max_norm(T[0],T_source[0], &i,&j);    
