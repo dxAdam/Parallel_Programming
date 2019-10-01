@@ -166,7 +166,9 @@ int main(int argc, char *argv[2])
 {
     int M                     = atoi(argv[1]); // number of points along y-axis (rows)
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
-    
+    M = M + 2; // this adds an extra layer for boundary
+    N = N + 2; //  conditiions
+
     int iterations_count      = 0;
     int max_iterations        = 1e6;
     int num_threads;
