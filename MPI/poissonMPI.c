@@ -15,12 +15,16 @@
     Program: poissonMPI
 
         Block paritioning Poisson solver that accepts number of processors (np) 
-            and grid dimensions M X N as command line arguments. The number of points
-            M and N must be a multiple of the number of processors in the respective direction.
+        and grid dimensions M X N as command line arguments. The number of 
+        points M and N must be a multiple of the number of processors in the
+        respective direction.
+*/
 
-/* 
+
+/*
     Usage:
-            mpirun -np <p> poissonMPI <N> <M> <P> <I>
+
+        mpirun -np <p> poissonMPI <N> <M> <P> <I>
 
             <p> - number of processors
 
@@ -39,29 +43,33 @@
         
         mpirun -np 4 poissonMPI 40 80 G
 
-        will divide a 40 x 80 matrix evenly among 4 processors in a 2D block pattern (G)
+        will divide a 40 x 80 matrix evenly among 4 processors in a 2D block
+        pattern (G)
 
-        Note: 40 and 80 can be evenly divided between the processors in each direction. 
-            So this is a valid configuration. Each processor will compute a 20x40 grid.
+        Note: 40 and 80 can be evenly divided between the processors in each
+        direction. 
+            
+        So this is a valid configuration. Each processor will compute a
+        20x40 grid.
 
 */
 
 /*
     Source term:
 
-       S(x,y) = x*exp(y)
+        S(x,y) = x*exp(y)
 
-       note: x*exp(y) is an exact solution of the Laplace equation.
+        note: x*exp(y) is an exact solution of the Laplace equation.
 
     Boundary conditions:
 
-       0 <= x <= 2
-       0 <= y <= 1
-
-       T(0,y) = 0             (left)
-       T(2,y) = 2*exp(y)      (right)
-       T(x,0) = x             (bottom)
-       T(x,1) = x*exp(1)        (top)
+        0 <= x <= 2
+        0 <= y <= 1
+ 
+        T(0,y) = 0             (left)
+        T(2,y) = 2*exp(y)      (right)
+        T(x,0) = x             (bottom)
+        T(x,1) = x*exp(1)        (top)
 
     
     Grid Layout:
@@ -268,8 +276,8 @@ void decompose_grid_vert(){
     int coord[2], id;
 
     // find dx and dy from boundary conditions and input
-    dx = (X_MAX - X_MIN) / (N-1);
-    dy = (Y_MAX - Y_MIN) / (M-1);
+    dx = (X_MAX - X_MIN) / (N+1);
+    dy = (Y_MAX - Y_MIN) / (M+1);
 
     my_N = N / np;
     my_N_min = my_rank*my_N;
@@ -278,9 +286,6 @@ void decompose_grid_vert(){
     my_M = M;
     my_M_min = 0;
     my_M_max = my_M_min + my_M - 1;
-
-    printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
-        ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
 
     // now we need to check that my_N*np == N to make sure
     //   we're not losing any of the original matrix
@@ -313,17 +318,18 @@ void decompose_grid_vert(){
 void calculate_vert_boundaries(double *T, double *T_source, int my_rank){
     
     int i,j;
+    int x = 1;
 
     if(my_N_min == 0){  // along left bound
-        for(j = 1; j<my_M+1; j++){
-            T[(my_M+2) + j] = T_source[j-1];
+        for(j = 0; j<my_M; j++){
+            T[j] = T_source[j];
         }
     }
     
     if(my_N_max == N-1) // along right bound
     {
-        for(j = 1; j < my_M+1; j++){
-            T[(my_M+2)*(my_N)+j] = T_source[(N-1)*M+j-1];
+        for(j = 0; j < my_M; j++){
+            T[(my_M-1)*my_N + j] = T_source[(my_M-1)*my_N  + j];
         }
     }
 }
@@ -338,15 +344,15 @@ int calculate_horz_boundaries(double *T, double *T_source, int my_rank){
 
     if(my_M_min == 0){
         // bottom
-        for(i = 1; i<my_N+1; i++){
-            T[(my_M+2)*i + 1] = T_source[(M)*(i-1)];
+        for(i = 0; i<my_N; i++){
+            T[my_M*i] = T_source[my_M*i];
         }
     }
 
     if(my_M_max == M-1){
         // top
         for(i = 1; i<my_N+1; i++){
-            T[(my_M+2)*i + my_M] = T_source[M*i - 1];
+            T[my_M*i - 1] = T_source[my_M*i - 1];
         }
     }
 }
@@ -356,12 +362,12 @@ int calculate_horz_boundaries(double *T, double *T_source, int my_rank){
     Fills an array with a hard-coded value below. Can be used to give matrix a starting
         value or for debugging.     
 */
-void fill_array(double *T, int M, int N)
+void fill_array(double *T)
 {
     int i,j;
-    for(i=0; i<N; i++){
-        for(j=0; j<M; j++){
-            T[i*M + j] = i*M + j;
+    for(i=0; i<my_N; i++){
+        for(j=0; j<my_M; j++){
+            T[i*my_M + j] = i*my_M + j;
         }
     }
 }
@@ -375,12 +381,13 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
     double norm, max_norm = 0;
     int i,j;
 
-    for(i=0;i<my_N; i++)
+
+    for(i=1;i<my_N-1; i++)
     {
-        for(j=0;j<my_M;j++){
+        for(j=1;j<my_M-1;j++){
 
             //calculate the differnece vector and compare to current max
-            norm = T[my_M*i + j]  -  T_source[M*(i+my_N_min) + j + my_M_min];
+            norm = T[my_M*i + j]  -  T_source[my_M*i+ j];
             //printf("T[]: %f     T_source[]: %f\n", T[M*i + j], T_source[(M)*(i+my_N_min) + my_M_min + j]);
             if(norm < 0)  // get absolute value if negative
                 norm = norm*(-1);
@@ -390,9 +397,6 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
                 *i_max = i;
                 *j_max = j;
             }
-            
-            //if(i == my_N / 2 && j == my_M / 2)
-            //    printf("max_norm is: %f.4\n", max_norm);
         }
         //printf("\n");
     }
@@ -412,10 +416,6 @@ double ** trim_matrix_edges(double *T)
     Tmp[0]        = (double *)calloc(sizeof(double)*my_M*my_N, sizeof(double));
 
     int i, j;
-
-    //fill_array(Tmp[0], my_M, my_N);
-
-    //return Tmp;
 
     for(i=0;i<=my_N; i++)
     {
@@ -442,16 +442,17 @@ extern void VTK_out(const int N, const int M, const double *Xmin, const double *
 */
 void initialize_arrays(double **T, double **T_prev, double **T_source)
 {    
-    int i,j;
-    for(i = 0; i<(my_N+2); i++){
-        T[i] = &T[0][i*(my_M+2)];
-        T_prev[i] = &T_prev[0][i*(my_M+2)];
+    int j;
+    for(j = 0; j<my_M; j++){
+        T[j] = &T[0][j*my_N];
+        T_prev[j] = &T_prev[0][j*my_N];
     }
 
     // calculate T_source using the source function for each entry
-    for(i=0;i<N;i++){
-        for(j=0;j<M;j++){
-            T_source[0][i*M+j] = source_function(X_MIN+i*dx,Y_MIN + j*dy);
+    int i;
+    for(i=0;i<my_N;i++){
+        for(j=0;j<my_M;j++){
+            T_source[0][i*my_M + j] = source_function(X_MIN+(i+my_N_min)*dx,Y_MIN + (j+my_M_min)*dy);
         }
     }
 }
@@ -463,8 +464,8 @@ void initialize_arrays(double **T, double **T_prev, double **T_source)
 */
 void swap_rows(double* T)
 {
-    MPI_Sendrecv(&T[(my_N+2)*(my_M)], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
-    MPI_Sendrecv(&T[my_N+2], 1, x_vector, down, 1, &T[(my_M+1)*(my_N+2)], 1, x_vector, up, 1, com2d, &status);
+    MPI_Sendrecv(&T[my_N*(my_M-2)], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
+    MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);
 }
 
 /*
@@ -473,7 +474,7 @@ void swap_rows(double* T)
 void swap_columns(double* T)
 {
     MPI_Sendrecv(&T[my_N], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
-    MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N+1], 1, y_vector, right, 1, com2d, &status);
+    MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N-1], 1, y_vector, right, 1, com2d, &status);
 }
 
 
@@ -481,20 +482,20 @@ void swap_columns(double* T)
 /*
     prints a passed array T as a grid. Useful for troubleshooting.
 */
-void print_tables(const int M, const int N, double *T)
+void print_tables(double *T)
 {
     int i,j;
     double tmp;
 
-    for(j=0;j<M;j++)
+    for(j=my_M-1;j>=0;j--)
     {
-        for(i=0;i<N;i++)
+        for(i=0;i<my_N;i++)
         {
             //double * tmp;
             //tmp = &T[(M-1)*(i+1) + i - j];
             //printf("  %p  " , tmp);          // prints address
 
-            tmp = T[(M-1)*(i+1) + i - j];
+            tmp = T[my_M*i + j];
             printf("%.6f ", tmp);
         }
         printf("\n");
@@ -514,10 +515,10 @@ void print_all(double *T, double *T_source)
         if(my_rank == i){
           if(my_rank == 0){
               printf("T_source:\n");
-              print_tables(M, N, T_source);
+              print_tables(T_source);
           }
             printf("\n process: %d   my_M: %d\n",i, my_M);
-            print_tables(my_M+2, my_N+2, T);
+            print_tables(T);
         }
     }
 }
@@ -536,36 +537,31 @@ double jacobi(double *T, double *T_prev, double *T_source)
         double dy2 = dy*dy;
         double dx2dy2 = dx2*dy2;
 
-        //fill_array(&T[0], my_M+2, my_N+2);
-        int x = 1;
-        for(int i=1; i<my_N+2; i++)
+        int x = 0;
+        for(int i=1; i<my_N-1; i++)
         {
-            // check if this processor is against the left or right boundary
-            if(left == MPI_PROC_NULL && i==1) i++;
-            if(right == MPI_PROC_NULL && i==my_N) break;
+            //// check if this processor is against the left or right boundary
+            //if(left == MPI_PROC_NULL && i==1) i++;
+            //if(right == MPI_PROC_NULL && i==my_N) break;
 
-            for(int j=1; j<my_M+2; j++)
-            {
-                // check if this processor is a agaist the top or bottom boundary 
-                if(down == MPI_PROC_NULL && j==1) j++;
-                if(up == MPI_PROC_NULL && j==my_M) break;
-                
-                    // calculate new T(i,j) 
-                    T[(my_M+2)*i + j] =  C*((T_prev[(my_M+2)*i +j-1]              // below
-                                        +   T_prev[(my_M+2)*i+j+1])*dx2           // above
-                                        +  (T_prev[(my_M+2)*(i-1)+j]              // left
-                                        +   T_prev[(my_M+2)*(i+1)+j])*dy2         // right
-                                        -   T_source[M*i+j]*dx2dy2);   
+            for(int j=1; j<my_M-1; j++)
+            {    
+                // calculate new T(i,j) 
+                T[my_M*i + j] =  C*((T_prev[my_M*i +j-1]               // below
+                                +    T_prev[my_M*i+j+1])*dx2           // above
+                                +   (T_prev[my_M*(i-1)+j]              // left
+                                +    T_prev[my_M*(i+1)+j])*dy2         // right
+                                -    T_source[my_M*i+j]*dx2dy2);   
 
 
-                    // calculate T_largest_change
-                    if(T[(my_M+1)*i + j - 1]-T_prev[(my_M+1)*i + j - 1] > T_largest_change)
-                    {
-                        T_largest_change = T[(my_M+1)*i + j - 1]-T_prev[(my_M+1)*i + j - 1];
-                        if(T_largest_change < 0)
-                            T_largest_change*(-1);
-                    }
-            x++;
+                // calculate T_largest_change
+                if(T[my_M*i + j]-T_prev[my_M*i + j] > T_largest_change)
+                {
+                    T_largest_change = T[my_M*i + j]-T_prev[my_M*i + j];
+                    if(T_largest_change < 0)
+                        T_largest_change*(-1);
+                }
+                x++;
             }
         }
 
@@ -639,21 +635,26 @@ int main (int argc, char* argv[]){
         partition_method = 'V';
     }
 
+    my_M = my_M + 2; // this adds an outer layer for boundary conditions or
+    my_N = my_N + 2; // ghost cells
+
+    //printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
+    //    ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
+
     // declare type vectors for ghost rows and columns
-    MPI_Type_vector(my_N+2, 1, 1, MPI_DOUBLE, &x_vector);
-    MPI_Type_vector(my_M+2, 1, my_N+2, MPI_DOUBLE, &y_vector);
+    MPI_Type_vector(my_N, 1, 1, MPI_DOUBLE, &x_vector);
+    MPI_Type_vector(my_M, 1, my_N, MPI_DOUBLE, &y_vector);
     MPI_Type_commit(&x_vector);
     MPI_Type_commit(&y_vector);
 
-    double** T_prev = (double **)malloc(sizeof(*T_prev)*(my_N+2));
-        T_prev[0] = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
+    double** T_prev       = (double **)malloc(sizeof(*T_prev)*my_M);
+    T_prev[0]             = (double *)calloc(sizeof(double)*my_M*my_N, sizeof(double));
     
-    // declare arrays then call initializing function
-    double** T            = (double **)malloc(sizeof(*T)*(my_N+2));
-    T[0]                  = (double *)calloc(sizeof(double)*(my_N+2)*(my_M+2), sizeof(double));
+    double** T            = (double **)malloc(sizeof(*T)*my_M);
+    T[0]                  = (double *)calloc(sizeof(double)*my_M*my_N, sizeof(double));
     
-    double** T_source     = (double **)malloc(sizeof(*T_source)*(N));
-    T_source[0]           = (double *)calloc(sizeof(double)*N*M, sizeof(double));
+    double** T_source     = (double **)malloc(sizeof(*T_source)*my_M);
+    T_source[0]           = (double *)calloc(sizeof(double)*my_M*my_N, sizeof(double));
     
     double* TmpSwp        = NULL;
 
@@ -661,8 +662,8 @@ int main (int argc, char* argv[]){
     initialize_arrays(T, T_prev, T_source);
 
     // this function can be used to populate the arrays with a starting value if desired
-    //fill_array(T[0], my_M+2, my_N+2);
-    //fill_array(T_source[0], M+2, N+2);
+    //fill_array(T[0]);
+    //fill_array(T_source[0]);
 
     if(up == MPI_PROC_NULL || down == MPI_PROC_NULL){
         calculate_horz_boundaries(T[0], T_source[0], my_rank);
@@ -675,11 +676,11 @@ int main (int argc, char* argv[]){
     }
 
     //printf("T:\n");
-    //print_tables(my_M+2, my_N+2, T[0]);
+    //print_tables(T[0]);
 
     start_time = MPI_Wtime();
     // begin Jacobi iterations
-    while(iterations < iteration_limit)// && global_largest_change > target_convergence )
+    while(iterations < iteration_limit && global_largest_change > target_convergence )
     {
         // swap_columns(T[0]);
         // swap_rows(T[0]);
@@ -701,20 +702,21 @@ int main (int argc, char* argv[]){
     }
 
     end_time = MPI_Wtime();
-    printf("T:\n");
-    print_tables(my_M+2, my_N+2, T[0]);
 
-    T = trim_matrix_edges(T[0]);  //padding exists on all sides of the matrix due to ghost layers
+    //printf("T:\n");
+    //print_tables(my_M+2, my_N+2, T[0]);
 
-   // printf("T_prev:\n");
-   // print_tables(my_M, my_N, T_prev[0]);
+    //T = trim_matrix_edges(T[0]);  //padding exists on all sides of the matrix due to ghost layers
+/*
+    printf("T_prev:\n");
+    print_tables(T_prev[0]);
   
     printf("T:\n");
-    print_tables(my_M, my_N, T[0]);
+    print_tables(T[0]);
 
     printf("T_Source:\n");
-    print_tables(M,N,T_source[0]);
-
+    print_tables(T_source[0]);
+*/
     int i,j; //used to retrieve max norm position
     
     my_max_norm = calculate_max_norm(T[0],T_source[0], &i,&j);    
@@ -727,13 +729,13 @@ int main (int argc, char* argv[]){
 
     // print max_norm and cleanup messages
     if(my_rank == 0){
-        printf("max_norm: %.12e at (%d, %d)\ntime: %fs\niterations: %d\n",global_max_norm, i, j, end_time - start_time, iterations);
+        printf("\nmax_norm: %.12e at (%d, %d)\ntime: %fs\niterations: %d\n",global_max_norm, i, j, end_time - start_time, iterations);
     }
     
 
-    //// generate .vtk files
-    //VTK_out(my_N, my_M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
-//
+    // generate .vtk files
+    VTK_out(my_N, my_M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
+
     free(T);
     free(T_prev);
     free(T_source);
