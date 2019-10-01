@@ -15,7 +15,7 @@
 
     These will be the dimensions of the 2D grid.
 
-        M = Number of points along y-axis (M)
+        M = Number of points along y-axis (rows)
         N = Number of points along x-axis (columns)
 */
 
@@ -163,7 +163,9 @@ int main(int argc, char *argv[2])
 {
     int M                     = atoi(argv[1]); // number of points along y-axis (rows)
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
-    
+    M = M + 2;  // this creates an extra layer around our grid for boundary
+    N = N + 2;  //  conditions
+
     int iterations_count      = 0;
     int max_iterations        = 1e6;
     double target_convergence = 10e-12;
@@ -178,9 +180,9 @@ int main(int argc, char *argv[2])
     double * T_prev           = NULL;
     double * TmpSwp           = NULL;  // used to swap T and T_prev pointers
     double *restrict T_source = NULL;
-    T                         = (double *)calloc(M*N + 2, sizeof(double));
-    T_prev                    = (double *)calloc(M*N + 2, sizeof(double));
-    T_source                  = (double *)calloc(M*N + 2, sizeof(double));
+    T                         = (double *)calloc(M*N, sizeof(double));
+    T_prev                    = (double *)calloc(M*N, sizeof(double));
+    T_source                  = (double *)calloc(M*N, sizeof(double));
 
 
 {
