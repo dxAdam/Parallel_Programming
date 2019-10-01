@@ -315,13 +315,13 @@ void decompose_grid_vert(){
 /*
     populates array with vertical boundary values
 */
-void calculate_vert_boundaries(double *T, double *T_source, int my_rank){
+void calculate_vert_boundaries(double *T, double *T_source){
     
     int i,j;
     int x = 1;
-
+    
     if(my_N_min == 0){  // along left bound
-        for(j = 0; j<my_M; j++){
+        for(j = 0; j < my_M; j++){
             T[j] = T_source[j];
         }
     }
@@ -329,7 +329,7 @@ void calculate_vert_boundaries(double *T, double *T_source, int my_rank){
     if(my_N_max == N-1) // along right bound
     {
         for(j = 0; j < my_M; j++){
-            T[(my_M-1)*my_N + j] = T_source[(my_M-1)*my_N  + j];
+            T[my_M*(my_N-1) + j] = T_source[my_M*(my_N-1) + j];
         }
     }
 }
@@ -338,7 +338,7 @@ void calculate_vert_boundaries(double *T, double *T_source, int my_rank){
 /*
     populates array with horizontal boundary values
 */
-int calculate_horz_boundaries(double *T, double *T_source, int my_rank){
+int calculate_horz_boundaries(double *T, double *T_source){
 
     int i,j;
 
@@ -365,9 +365,10 @@ int calculate_horz_boundaries(double *T, double *T_source, int my_rank){
 void fill_array(double *T)
 {
     int i,j;
-    for(i=0; i<my_N; i++){
-        for(j=0; j<my_M; j++){
-            T[i*my_M + j] = i*my_M + j;
+    int x = 1 + 100*my_rank;
+    for(i=1; i<my_N-1; i++){
+        for(j=1; j<my_M-1; j++){
+            T[i*my_M + j] = x++;//i*my_M + j;
         }
     }
 }
@@ -463,8 +464,8 @@ void initialize_arrays(double **T, double **T_prev, double **T_source)
     swaps rows with neighboring processes defined by MPI_Cart_create in main()  
 */
 void swap_rows(double* T)
-{
-    MPI_Sendrecv(&T[my_N*(my_M-2)], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
+{                                               //dest                      //source
+    MPI_Sendrecv(&T[my_N*my_M-2*my_M], 1, x_vector, up, 1, &T[0], 1, x_vector, down, 1, com2d, &status);
     MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);
 }
 
@@ -473,8 +474,8 @@ void swap_rows(double* T)
 */
 void swap_columns(double* T)
 {
-    MPI_Sendrecv(&T[my_N], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
-    MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N-1], 1, y_vector, right, 1, com2d, &status);
+    MPI_Sendrecv(&T[my_M], 1, y_vector, left, 1, &T[my_M*(my_N-1)], 1, y_vector, right, 1, com2d, &status);                                                 //dest                        source
+    MPI_Sendrecv(&T[my_M*my_N-2*my_M], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
 }
 
 
@@ -513,12 +514,11 @@ void print_all(double *T, double *T_source)
     for(i=0; i<np; i++){
         MPI_Barrier(com2d);
         if(my_rank == i){
-          if(my_rank == 0){
-              printf("T_source:\n");
-              print_tables(T_source);
-          }
-            printf("\n process: %d   my_M: %d\n",i, my_M);
+            printf("rank: %d my_M: %d my_N: %d T:\n", my_rank, my_M, my_N);
             print_tables(T);
+            printf("rank: %d T_source:\n", my_rank);
+            print_tables(T_source);
+            fflush(stdout);
         }
     }
 }
@@ -540,10 +540,6 @@ double jacobi(double *T, double *T_prev, double *T_source)
         int x = 0;
         for(int i=1; i<my_N-1; i++)
         {
-            //// check if this processor is against the left or right boundary
-            //if(left == MPI_PROC_NULL && i==1) i++;
-            //if(right == MPI_PROC_NULL && i==my_N) break;
-
             for(int j=1; j<my_M-1; j++)
             {    
                 // calculate new T(i,j) 
@@ -642,8 +638,8 @@ int main (int argc, char* argv[]){
     //    ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
 
     // declare type vectors for ghost rows and columns
-    MPI_Type_vector(my_N, 1, 1, MPI_DOUBLE, &x_vector);
-    MPI_Type_vector(my_M, 1, my_N, MPI_DOUBLE, &y_vector);
+    MPI_Type_vector(my_N, 1, my_N, MPI_DOUBLE, &x_vector);
+    MPI_Type_vector(my_M, my_M, 1, MPI_DOUBLE, &y_vector);
     MPI_Type_commit(&x_vector);
     MPI_Type_commit(&y_vector);
 
@@ -665,15 +661,11 @@ int main (int argc, char* argv[]){
     //fill_array(T[0]);
     //fill_array(T_source[0]);
 
-    if(up == MPI_PROC_NULL || down == MPI_PROC_NULL){
-        calculate_horz_boundaries(T[0], T_source[0], my_rank);
-        calculate_horz_boundaries(T_prev[0], T_source[0], my_rank);
-    }
-
-    if(left == MPI_PROC_NULL || right == MPI_PROC_NULL){
-        calculate_vert_boundaries(T[0], T_source[0], my_rank);
-        calculate_vert_boundaries(T_prev[0], T_source[0], my_rank);
-    }
+    calculate_horz_boundaries(T[0], T_source[0]);
+    calculate_horz_boundaries(T_prev[0], T_source[0]);
+//
+    calculate_vert_boundaries(T[0], T_source[0]);
+    calculate_vert_boundaries(T_prev[0], T_source[0]);
 
     //printf("T:\n");
     //print_tables(T[0]);
@@ -682,8 +674,8 @@ int main (int argc, char* argv[]){
     // begin Jacobi iterations
     while(iterations < iteration_limit && global_largest_change > target_convergence )
     {
-        // swap_columns(T[0]);
-        // swap_rows(T[0]);
+        swap_columns(T[0]);
+        //swap_rows(T[0]);
 
         // swap T and T_prev pointers if not first iteration
         if(iterations++ > 0)
@@ -707,6 +699,10 @@ int main (int argc, char* argv[]){
     //print_tables(my_M+2, my_N+2, T[0]);
 
     //T = trim_matrix_edges(T[0]);  //padding exists on all sides of the matrix due to ghost layers
+
+
+    //print_all(T[0], T_source[0]);
+
 /*
     printf("T_prev:\n");
     print_tables(T_prev[0]);
