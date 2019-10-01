@@ -418,11 +418,11 @@ double ** trim_matrix_edges(double *T)
 
     int i, j;
 
-    for(i=0;i<=my_N; i++)
+    for(i=0;i<my_N-2; i++)
     {
-        for(j=0;j<my_M;j++)
+        for(j=0;j<my_M-2;j++)
         {
-            Tmp[0][(my_M+my_M_min)*(my_N_min+i-1) + (j+my_M_min)] =  (T[(my_M+2)*i + 1 + j]);
+            Tmp[0][(my_M-2)*i+j] =  (T[my_M*(i+1) + 1 + j]);
         }
     }
     free(T);
@@ -728,9 +728,16 @@ int main (int argc, char* argv[]){
         printf("\nmax_norm: %.12e at (%d, %d)\ntime: %fs\niterations: %d\n",global_max_norm, i, j, end_time - start_time, iterations);
     }
     
+    //print_tables(T[0]);
 
-    // generate .vtk files
-    VTK_out(my_N, my_M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank-1);
+    T = trim_matrix_edges(T[0]);
+    
+    my_M = my_M - 2;
+    my_N = my_N - 2;
+
+    //print_tables(T[0]);
+
+    VTK_out(my_M, my_N, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank);
 
     free(T);
     free(T_prev);
