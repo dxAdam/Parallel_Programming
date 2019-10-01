@@ -1,6 +1,0 @@
-# multicore CPU
-pgcc -acc -Minfo -ta=multicore poissonACC.c vtk.c -lm -o poissonACC_cpu
-
-
-# Nvidia GPU
-pgcc -acc -Minfo -ta=tesla -O0 poissonACC.c vtk.c -o poissonACC_CUDA
