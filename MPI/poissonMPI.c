@@ -720,14 +720,20 @@ int main (int argc, char* argv[]){
     
     //print_tables(T[0]);
 
-    T = trim_matrix_edges(T[0]);
+    //T = trim_matrix_edges(T[0]);
     
-    my_M = my_M - 2;
-    my_N = my_N - 2;
+    //my_M = my_M - 2;
+    //my_N = my_N - 2;
 
     //print_tables(T[0]);
+    double my_X_min = (my_N_min)*dx;
+    double my_Y_min = (my_M_min)*dy;
+    double my_X_max = (my_N_max+2)*dx;
+    double my_Y_max = (my_M_max+2)*dy;
 
-    VTK_out(my_M, my_N, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T[0], my_rank);
+    printf("X_min: %f   X_max: %f   Y_min: %f    Y_max: %f\n", my_X_min, my_X_max, my_Y_min, my_Y_max);
+
+    VTK_out(my_N, my_M, &my_X_min, &my_X_max, &my_Y_min, &my_Y_max, T[0], my_rank);
 
     free(T);
     free(T_prev);
