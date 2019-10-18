@@ -475,8 +475,7 @@ void initialize_arrays(double *T, double *T_prev, double *T_source, double X_MIN
 void swap_rows(double* T)
 {      
    // printf("%d:  up:%d   down:%d\n", my_rank, up, down);;
-                                             //dest                      //source
-
+                                       //dest                                //source
     MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);                                                 //dest                        source
     MPI_Sendrecv( &T[(my_M-2)*my_N], 1, x_vector, up, 1,&T[0], 1, x_vector, down, 1, com2d, &status);
 }
@@ -485,8 +484,8 @@ void swap_rows(double* T)
 */
 void swap_columns(double* T)
 {
-    MPI_Sendrecv(&T[my_N-2], 1, x_vector, left, 1, &T[0], 1, x_vector, right, 1, com2d, &status);
-    MPI_Sendrecv(&T[1], 1, x_vector, right, 1, &T[my_M-1], 1, x_vector, left, 1, com2d, &status);
+    MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N-1], 1, y_vector, right, 1, com2d, &status);
+    MPI_Sendrecv(&T[my_N-2], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
 }
 
 
@@ -499,7 +498,7 @@ void print_tables(double *T)
     int i,j;
     double tmp;
 
-    for(j=0;j<my_M;j++)
+    for(j=my_M-1;j>=0;j--)
     {
         for(i=0;i<my_N;i++)
         {
@@ -675,7 +674,7 @@ int main (int argc, char* argv[]){
 
     // this function can be used to populate the arrays with a starting value if desired
 
-    fill_array(T);
+   //fill_array(T);
 
     calculate_horz_boundaries(T, T_source);
     calculate_horz_boundaries(T_prev, T_source);
@@ -685,8 +684,11 @@ int main (int argc, char* argv[]){
 
 
     start_time = MPI_Wtime();
+    
+
     // begin Jacobi iterations
     while(iterations < iteration_limit && global_largest_change > target_convergence )
+    //while(iterations < 1)
     {
         swap_columns(T);
         swap_rows(T);
@@ -706,18 +708,15 @@ int main (int argc, char* argv[]){
         else
             MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
     }
+    
 
     end_time = MPI_Wtime();
-
-   
-   
-    // print T and T_source for debugging
     
+
     //print_all(T, T_source);
 
    
     // calculate max norm
-
     int i,j; //used to retrieve max norm position 
     my_max_norm = calculate_max_norm(T,T_source, &i,&j);    
     
@@ -728,17 +727,8 @@ int main (int argc, char* argv[]){
 
     // print max_norm and cleanup messages
     if(my_rank == 0){
-        printf("\nmax_norm: %.12e at (%d, %d)\ntime: %fs\niterations: %d\n",global_max_norm, i, j, end_time - start_time, iterations);
+        printf("\nmax_norm: %.12e\ntime: %fs\niterations: %d\n",global_max_norm, end_time - start_time, iterations);
     }
-
-
-
-    // trim outer edge from T and send to VTK_out()
-
-    T = trim_matrix_edges(T);
-    my_M = my_M - 2;
-    my_N = my_N - 2;
-
 
     VTK_out(my_N, my_M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, my_rank);
 
