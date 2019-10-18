@@ -45,19 +45,19 @@
     
     Grid Layout:
 
-        M x N = 5 X 4 
+        example: M x N = 5 X 4 
 
-    (0,0)__________ j=N __ x    When we print, we mirror the x-axis so the
-        |[0][5][10][15]             plot appears with (5,4) on the top right corner
-        |[1][6][11][16]
-        |[2][7][12][17]
-        |[3][8][13][18]
-    i=M |[4][9][14][19]
-        |          (5,4)
-        y                        
+    (0,0)____________ i=N__x    * When we print, we mirror the x-axis so the
+        |[ 0][ 1][ 2][ 3]         plot appears with 23 on the top right corner
+        |[ 4][ 5][ 6][ 7]
+        |[ 8][ 9][10][11]
+        |[12][13][14][15]
+        |[16][17][18][19]
+    j=M |[20][21][22][23]
+        y    
 
 */
-// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
+// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 
 // define MIN & MAX described above
 double X_MIN = 0;
@@ -171,8 +171,8 @@ int main(int argc, char *argv[2])
     int M                     = atoi(argv[1]); // number of points along y-axis (rows)
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
 
-    M = M + 2; // this adds an extra layer for boundary
-    N = N + 2; //  conditions
+    M                         = M + 2;         // this adds an extra layer for boundary
+    N                         = N + 2;         //  conditions
 
     int iterations_count      = 0;
     int max_iterations        = 1e6;
@@ -191,6 +191,11 @@ int main(int argc, char *argv[2])
     T_prev                    = (double *)calloc(M*N + 2, sizeof(double));
     T_source                  = (double *)calloc(M*N + 2, sizeof(double));
 
+
+
+// Initialize matrices
+
+// parallelization is unnecessary here unless the matrix is extremely large
 //#pragma acc data copyin(T_source[0:M*N]) copyout(T_source[0:N*M])
 //{
     // calculate T_source using the source function for each entry
@@ -207,8 +212,11 @@ int main(int argc, char *argv[2])
     calculate_boundaries(M,N,T,dx,dy);
     calculate_boundaries(M,N,T_prev,dx,dy);
 
-    clock_t start = clock();
 
+
+// Perform Jacobi iterations
+
+clock_t start = clock();
 #pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
 {
     // Begin Jacobi iterations
@@ -257,11 +265,13 @@ int main(int argc, char *argv[2])
 }
     clock_t stop = clock();
 
-    int i_max;
-    int j_max;
+
+
+    // determine the max_norm of the difference vectors between T and T_source
+
+    int i_max, j_max;
     double max_norm;
 
-    // determine the max_norm of the difference vectors between T and T_source and print
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
 
     printf("elapsed: %f seconds\n", (double)(stop - start)/1000000);
