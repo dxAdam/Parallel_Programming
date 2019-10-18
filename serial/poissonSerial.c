@@ -39,15 +39,15 @@
     
     Grid Layout:
 
-        M x N = 5 X 4 
+        example: M x N = 5 X 4 
 
-    (0,0)__________ j=N __ x    When we print, we mirror the x-axis so the
-        |[0][5][10][15]         plot appears with (5,4) on the top right corner
-        |[1][6][11][16]
-        |[2][7][12][17]
-        |[3][8][13][18]
-    i=M |[4][9][14][19]
-        |          (5,4)
+    (0,0)____________ i=N__x    * When we print, we mirror the x-axis so the
+        |[ 0][ 1][ 2][ 3]         plot appears with 23 on the top right corner
+        |[ 4][ 5][ 6][ 7]
+        |[ 8][ 9][10][11]
+        |[12][13][14][15]
+        |[16][17][18][19]
+    j=M |[20][21][22][23]
         y                        
 
 */
@@ -157,42 +157,19 @@ double calculate_max_norm(const int M,const int N, double *T,
 }
 
 
-/*
-     trim the edges off a matrix and return a new one in its place. We need this
-     because the T array is (my_M+2) x (my_N+2) due to ghost cells, but now it
-     will be easier to have T and T_source the same size.
-*/
-double * trim_matrix_edges(double *T, int M, int N)
-{
-    //double*  Tmp = (double **)malloc(sizeof(*Tmp)*N);
-    double *Tmp          = (double *)calloc(sizeof(double)*(M-2)*(N-2), sizeof(double));
-
-    int i, j;
-
-    for(i=0;i<N-2; i++)
-    {
-        for(j=0;j<M-2;j++)
-        {
-            Tmp[(M-2)*i+j] =  (T[M*(i+1) + 1 + j]);
-        }
-    }
-    free(T);
-    return Tmp;
-}
-
-
 
 int main(int argc, char *argv[2])
 {
     int M                     = atoi(argv[1]); // number of points along y-axis (rows)
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
-    M = M + 2;  // this creates an extra layer around our grid for boundary
-    N = N + 2;  //  conditions
+    
+    M                         = M + 2;         // this creates an extra layer around
+    N                         = N + 2;         //  our grid for boundary conditions
 
     int iterations_count      = 0;
     int max_iterations        = 1e6;
     double target_convergence = 10e-12;
-    double T_largest_change   = target_convergence + 1; // must start greater than target_convergence
+    double T_largest_change   = target_convergence + 1; // must start > target_convergence
 
     // find dx and dy from boundary conditions and input
     double dx                 = (X_MAX - X_MIN) / (N-1);
@@ -208,24 +185,25 @@ int main(int argc, char *argv[2])
     T_source                  = (double *)calloc(M*N, sizeof(double));
 
 
-{
-    // calculate T_source using the source function for each entry
 
+    // Initialize matrices
+
+    // calculate T_source using the source function for each entry
     for(int i=0;i<N;i++)
     {
         for(int j=0;j<M;j++)
             T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
-}
 
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
     calculate_boundaries(M,N,T_prev,dx,dy);
 
+
+
+    // Perform Jacobi iterations
+    
     clock_t start = clock();
-
-
-    // Begin Jacobi iterations
     while(iterations_count<max_iterations &&
 		                  T_largest_change > target_convergence)
     {   
@@ -258,9 +236,6 @@ int main(int argc, char *argv[2])
                               +   T_prev[M*(i+1)+j])*dy2         // right
                               -   T_source[M*i+j]*dx2dy2);   
 
-               
-//		T_largest_change = fmax(fabs(T[M*i+j]-T_prev[M*i+j]), T_largest_change);
-
 	        	
                 // calculate T_largest_change
                 if(T[i*M+j]-T_prev[i*M+j] > T_largest_change)
@@ -272,14 +247,15 @@ int main(int argc, char *argv[2])
             }
         }
     }
-
     clock_t stop = clock();
 
-    int i_max;
-    int j_max;
+
+
+    // determine the max_norm of the difference vectors between T and T_source
+
+    int i_max, j_max;
     double max_norm;
 
-    // determine the max_norm of the difference vectors between T and T_source and print
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
 
     printf("elapsed: %f seconds\n", (double)(stop - start)/1000000);
@@ -293,15 +269,8 @@ int main(int argc, char *argv[2])
     printf("T_source:\n");
     print_table(M,N,T_source);
 */  
-    T = trim_matrix_edges(T, M, N);
-    
-    N = N - 2;
-    M = M - 2;
-    
-    X_MIN = X_MIN + dx;
-    X_MAX = X_MAX - dx;
-    Y_MIN = Y_MIN + dy;
-    Y_MAX = Y_MAX - dy;
+
+
 
     // generate paraview .vtk file
     VTK_out(N, M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, 0);
