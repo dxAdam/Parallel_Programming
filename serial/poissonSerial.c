@@ -157,6 +157,29 @@ double calculate_max_norm(const int M,const int N, double *T,
 }
 
 
+/*
+     trim the edges off a matrix and return a new one in its place. We need this
+     because the T array is (my_M+2) x (my_N+2) due to ghost cells, but now it
+     will be easier to have T and T_source the same size.
+*/
+double * trim_matrix_edges(double *T, int M, int N)
+{
+    //double*  Tmp = (double **)malloc(sizeof(*Tmp)*N);
+    double *Tmp          = (double *)calloc(sizeof(double)*(M-2)*(N-2), sizeof(double));
+
+    int i, j;
+
+    for(i=0;i<N-2; i++)
+    {
+        for(j=0;j<M-2;j++)
+        {
+            Tmp[(M-2)*i+j] =  (T[M*(i+1) + 1 + j]);
+        }
+    }
+    free(T);
+    return Tmp;
+}
+
 
 
 int main(int argc, char *argv[2])
@@ -270,9 +293,18 @@ int main(int argc, char *argv[2])
     printf("T_source:\n");
     print_table(M,N,T_source);
 */  
+    T = trim_matrix_edges(T, M, N);
+    
+    N = N - 2;
+    M = M - 2;
+    
+    X_MIN = X_MIN + dx;
+    X_MAX = X_MAX - dx;
+    Y_MIN = Y_MIN + dy;
+    Y_MAX = Y_MAX - dy;
 
     // generate paraview .vtk file
-    VTK_out(M, N, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, 0);
+    VTK_out(N, M, &X_MIN, &X_MAX, &Y_MIN, &Y_MAX, T, 0);
     
     free(T);
     free(T_source);

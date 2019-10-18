@@ -21,7 +21,7 @@
 
     These will be the dimensions of the 2D grid.
 
-        M = Number of points along y-axis (M)
+        M = Number of points along y-axis (rows)
         N = Number of points along x-axis (columns)
 */
 

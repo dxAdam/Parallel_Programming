@@ -716,9 +716,6 @@ int main (int argc, char* argv[]){
     //print_all(T, T_source);
 
    
-
-
-
     // calculate max norm
 
     int i,j; //used to retrieve max norm position 
