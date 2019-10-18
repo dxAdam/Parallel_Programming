@@ -265,7 +265,7 @@ int main(int argc, char *argv[2])
 
 
 
-    // determine the max_norm of the difference vectors between T and T_source and print
+    // determine the max_norm of the difference vectors between T and T_source
 
     int i_max, j_max;
     double max_norm;
