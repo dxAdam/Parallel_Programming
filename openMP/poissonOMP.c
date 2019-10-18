@@ -39,19 +39,20 @@
        T(2,y) = 2*exp(y)      (right)
        T(x,0) = x             (bottom)
        T(x,1) = x*exp(1)      (top)
-                          
+    
+    
     Grid Layout:
 
-        M x N = 5 X 4 
+        example: M x N = 5 X 4 
 
-    (0,0)__________ j=N __ x
-        |[0][5][10][15]
-        |[1][6][11][16]
-        |[2][7][12][17]
-        |[3][8][13][18]
-    i=M |[4][9][14][19]
-        |          (5,4)
-        y
+    (0,0)____________ i=N__x    * When we print, we mirror the x-axis so the
+        |[ 0][ 1][ 2][ 3]         plot appears with 23 on the top right corner
+        |[ 4][ 5][ 6][ 7]
+        |[ 8][ 9][10][11]
+        |[12][13][14][15]
+        |[16][17][18][19]
+    j=M |[20][21][22][23]
+        y    
 
 */
 // / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
@@ -166,8 +167,9 @@ int main(int argc, char *argv[2])
 {
     int M                     = atoi(argv[1]); // number of points along y-axis (rows)
     int N                     = atoi(argv[2]); // number points along x-axis (cols)
-    M = M + 2; // this adds an extra layer for boundary
-    N = N + 2; //  conditiions
+    
+    M                         = M + 2;         // this adds an extra layer for boundary
+    N                         = N + 2;         //  conditiions
 
     int iterations_count      = 0;
     int max_iterations        = 1e6;
@@ -179,6 +181,8 @@ int main(int argc, char *argv[2])
     double dx                 = (X_MAX - X_MIN) / (N-1);
     double dy                 = (Y_MAX - Y_MIN) / (M-1);
 
+
+    // set number of openMP threads if argument given
     if(argv[3])
 	    omp_set_num_threads(atoi(argv[3]));
 
@@ -193,27 +197,26 @@ int main(int argc, char *argv[2])
     T_source                  = (double *)calloc(M*N + 2, sizeof(double));
 
 
+
+    // Initialize matrices
+
     // calculate T_source using the source function for each entry
-    //#pragma omp parallel for
+    //#pragma omp parallel for     // this is unnecessary unless the matrix is extremely large
     for(int i=0;i<N;i++)
     {
       	for(int j=0;j<M;j++)
       	T_source[i*M+j] = source_function(X_MIN+i*dx,Y_MIN+j*dy);
     }
-    /*
-    #pragma omp parallel
-    {
-    	num_threads = omp_get_num_threads(); //this must be done in a parallel block
-    }
-    */
-    
+
     // calculate the boundries defined by the specific problem for T and T_prev
     calculate_boundaries(M,N,T,dx,dy);
     calculate_boundaries(M,N,T_prev,dx,dy);
 
-    double start = omp_get_wtime();
 
-    // Begin Jacobi iterations
+
+    // Perform Jacobi iterations
+
+    double start = omp_get_wtime();
     while(iterations_count<max_iterations && 
 		                  T_largest_change > target_convergence)
     {   
@@ -258,18 +261,18 @@ int main(int argc, char *argv[2])
             }
         }
     }
-
     double stop = omp_get_wtime();
 
 
-    int i_max;
-    int j_max;
-    double max_norm;
 
     // determine the max_norm of the difference vectors between T and T_source and print
+
+    int i_max, j_max;
+    double max_norm;
+
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
     
-    //printf("number of threads: %d\n", num_threads);
+    printf("number of threads: %d\n", num_threads);
     printf("elapsed: %f seconds\n", (double)(stop - start));
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
