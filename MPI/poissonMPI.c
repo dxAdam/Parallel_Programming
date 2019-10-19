@@ -195,11 +195,14 @@ void decompose_grid_2D_block(){
         MPI_Cart_shift(com2d, 0, 1, &down, &up);
     
 
-    my_M = M / ny + 2;
-    my_N = N / nx + 2;
+    my_M = M / ny;
+    my_N = N / nx;
 
     my_N_min = my_N*coord[1];
     my_M_min = my_M*coord[0];
+
+    my_M = my_M + 2;
+    my_N = my_N + 2;
 
     my_M_max = my_M_min + my_M - 1;
     my_N_max = my_N_min + my_N - 1;
@@ -648,7 +651,7 @@ int main (int argc, char* argv[]){
     //my_M = my_M + 2; // this adds an outer layer for boundary conditions or
     //my_N = my_N + 2; // ghost cells
     
-    printf("my_N_min: %d  my_N_max: %d   my_M_min: %d   my_M_max: %d\n", my_N_min, my_N_max, my_M_min, my_M_max);
+    printf("my_rank: %d\nmy_N_min: %d  my_N_max: %d   my_M_min: %d   my_M_max: %d\n", my_rank, my_N_min, my_N_max, my_M_min, my_M_max);
     printf("X_MIN: %f   X_MAX: %f   Y_MIN: %f   Y_MAX: %f  dx: %f   dy: %f\n\n", X_MIN, X_MAX, Y_MIN, Y_MAX, dx,dy);
 
     //printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
