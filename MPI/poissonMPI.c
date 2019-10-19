@@ -209,7 +209,7 @@ void decompose_grid_2D_block(){
 */
 void decompose_grid_horz(){
 
-        int error = 0;
+    int error = 0;
 
     if(my_rank == 0){
         printf("%d x %d  %dp  Horizontal decomposition\n", M, N, np);
