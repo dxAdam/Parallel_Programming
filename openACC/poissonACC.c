@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
+#include <sys/time.h>
 #include "openacc.h"
 
 /* For multicore, set number of cores from the shell with
@@ -191,6 +191,7 @@ int main(int argc, char *argv[2])
     T_prev                    = (double *)calloc(M*N + 2, sizeof(double));
     T_source                  = (double *)calloc(M*N + 2, sizeof(double));
 
+    struct timeval start_time, stop_time, elapsed_time;
 
 
 // Initialize matrices
@@ -214,9 +215,11 @@ int main(int argc, char *argv[2])
 
 
 
+
+
 // Perform Jacobi iterations
 
-clock_t start = clock();
+gettimeofday(&start_time, NULL);
 #pragma acc data copyin(T[0:M*N], T_prev[0:M*N], T_source[0:M*N]) copyout(T[0:N*M])
 {
     // Begin Jacobi iterations
@@ -263,8 +266,9 @@ clock_t start = clock();
         }
     }
 }
-    clock_t stop = clock();
+    gettimeofday(&stop_time, NULL);
 
+    timersub(&stop_time, &start_time, &elapsed_time);
 
 
     // determine the max_norm of the difference vectors between T and T_source
@@ -274,7 +278,7 @@ clock_t start = clock();
 
     max_norm = calculate_max_norm(M,N,T,T_source,&i_max,&j_max);
 
-    printf("elapsed: %f seconds\n", (double)(stop - start)/1000000);
+    printf("elapsed: %f seconds\n", elapsed_time.tv_sec + elapsed_time.tv_usec/1000000);
     printf("iterations: %d\n", iterations_count);
     printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
 
