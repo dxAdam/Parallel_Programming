@@ -189,7 +189,6 @@ void decompose_grid_2D_block(){
     MPI_Cart_shift(com2d, 1, 1, &left, &right);
     MPI_Cart_shift(com2d, 0, 1, &down, &up);
     
-
     my_M = M / ny;
     my_N = N / nx;
 
@@ -314,7 +313,6 @@ void decompose_grid_vert(){
 void calculate_vert_boundaries(double *T, double *T_source){
     
     int i,j;
-    int x = 1;
     
     // left
     if(my_N_min == 0){
@@ -366,7 +364,7 @@ void fill_array(double *T)
     int x = 1 + 100*my_rank;
     for(j=1; j<my_M-1; j++){
         for(i=1; i<my_N-1; i++){
-            T[my_N*j + i] = x++;//i*my_M + j;
+            T[my_N*j + i] = x++; //i*my_M + j;
         }
     }
 }
