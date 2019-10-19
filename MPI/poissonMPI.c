@@ -401,9 +401,7 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
 
 
 /*
-     trim the edges off a matrix and return a new one in its place. We need this
-     because the T array is (my_M+2) x (my_N+2) due to ghost cells, but now it
-     will be easier to have T and T_source the same size.
+     trim the edges off a matrix and return a new one in its place. Not used currently.
 */
 double * trim_matrix_edges(double *T)
 {
@@ -454,8 +452,7 @@ void initialize_arrays(double *T, double *T_prev, double *T_source, double X_MIN
     swaps rows with neighboring processes defined by MPI_Cart_create in main()  
 */
 void swap_rows(double* T)
-{      
-
+{
     MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);                                                 //dest                        source
     MPI_Sendrecv( &T[(my_M-2)*my_N], 1, x_vector, up, 1,&T[0], 1, x_vector, down, 1, com2d, &status);
 }
@@ -494,6 +491,7 @@ void print_tables(double *T)
 }
 
 
+
 /*
     prints all arrays with barriers to prevent buffer collisions
 */
@@ -511,6 +509,7 @@ void print_all(double *T, double *T_source)
         }
     }
 }
+
 
 
 /*
@@ -555,6 +554,7 @@ double jacobi(double *T, double *T_prev, double *T_source)
 
 //
 //    //   //  // ////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 int main (int argc, char* argv[]){
@@ -624,12 +624,8 @@ int main (int argc, char* argv[]){
     double Y_MIN = my_M_min*dy;
     double Y_MAX = my_M_max*dy;
 
-    
     //printf("my_rank: %d\nmy_N_min: %d  my_N_max: %d   my_M_min: %d   my_M_max: %d\n", my_rank, my_N_min, my_N_max, my_M_min, my_M_max);
     //printf("X_MIN: %f   X_MAX: %f   Y_MIN: %f   Y_MAX: %f  dx: %f   dy: %f\n\n", X_MIN, X_MAX, Y_MIN, Y_MAX, dx,dy);
-
-    //printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
-    //    ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
 
     // declare type vectors for ghost rows and columns
     MPI_Type_vector(my_N, my_N, 1, MPI_DOUBLE, &x_vector); //row
@@ -649,9 +645,7 @@ int main (int argc, char* argv[]){
 
     initialize_arrays(T, T_prev, T_source, X_MIN, Y_MIN);
 
-    // this function can be used to populate the arrays with a starting value if desired
-
-   //fill_array(T);
+    //fill_array(T); // this function can be used to populate the arrays with a starting value if desired
 
     calculate_horz_boundaries(T, T_source);
     calculate_horz_boundaries(T_prev, T_source);
@@ -660,10 +654,9 @@ int main (int argc, char* argv[]){
     calculate_vert_boundaries(T_prev, T_source);
 
 
-    start_time = MPI_Wtime();
-    
+    // Perform Jacobi iterations
 
-    // begin Jacobi iterations
+    start_time = MPI_Wtime();
     while(iterations < iteration_limit && global_largest_change > target_convergence )
     //while(iterations < 1)
     {
@@ -685,8 +678,6 @@ int main (int argc, char* argv[]){
         else
             MPI_Allreduce(&my_largest_change, &global_largest_change, 1, MPI_DOUBLE, MPI_MAX, com2d);
     }
-    
-
     end_time = MPI_Wtime();
     
 
