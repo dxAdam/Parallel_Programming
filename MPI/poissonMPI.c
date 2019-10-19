@@ -452,8 +452,11 @@ void initialize_arrays(double *T, double *T_prev, double *T_source, double X_MIN
 */
 void swap_rows(double* T)
 {
+    // up -> down
     MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);                                                 //dest                        source
-    MPI_Sendrecv( &T[(my_M-2)*my_N], 1, x_vector, up, 1,&T[0], 1, x_vector, down, 1, com2d, &status);
+    
+    // down -> up
+    MPI_Sendrecv(&T[(my_M-2)*my_N], 1, x_vector, up, 1,&T[0], 1, x_vector, down, 1, com2d, &status);
 }
 
 
@@ -463,7 +466,10 @@ void swap_rows(double* T)
 */
 void swap_columns(double* T)
 {
+    // right -> left
     MPI_Sendrecv(&T[1], 1, y_vector, left, 1, &T[my_N-1], 1, y_vector, right, 1, com2d, &status);
+    
+    // left -> right
     MPI_Sendrecv(&T[my_N-2], 1, y_vector, right, 1, &T[0], 1, y_vector, left, 1, com2d, &status);
 }
 
@@ -652,7 +658,6 @@ int main (int argc, char* argv[]){
 
     start_time = MPI_Wtime();
     while(iterations < iteration_limit && global_largest_change > target_convergence )
-    //while(iterations < 1)
     {
         swap_columns(T);
         swap_rows(T);
