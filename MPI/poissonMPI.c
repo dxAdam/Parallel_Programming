@@ -74,17 +74,16 @@
     
     Grid Layout:
 
-        M x N = 5 X 4 
+        example: M x N = 5 X 4 
 
-    (0,0)__________ j=N __ x
-        |[5][10][15]
-        |[1][6][11][16]
-        |[2][7][12][17]
-        |[3][8][13][18]
-    i=M |[4][9][14][19]
-        |          (5,4)
-        y
-
+    (0,0)____________ i=N__x    * When we print, we mirror the x-axis so the
+        |[ 0][ 1][ 2][ 3]         plot appears with 23 on the top right corner
+        |[ 4][ 5][ 6][ 7]
+        |[ 8][ 9][10][11]
+        |[12][13][14][15]
+        |[16][17][18][19]
+    j=M |[20][21][22][23]
+        y                        
 
 */
 //    //   //  // ///////////////////////////////////////////////////////////////////////
@@ -98,7 +97,7 @@ double GLOBAL_Y_MAX = 1;
 
 double dx, dy;
 
-char PRINT = 1; // PRINT == 0 only prints global norm and timing
+char DEBUG = 1; // DEBUG == 1 prints extra information useful for debugging
             
 MPI_Status status;
 MPI_Datatype x_vector, y_vector;
@@ -127,7 +126,7 @@ void decompose_grid_2D_block(){
 
     int error = 0;
     
-    if(my_rank == 0 && PRINT){
+    if(my_rank == 0){
         printf("%d x %d   %dp  2D Block Decomposition\n", M, N, np);
     }
     // used with MPI_Cart_create
@@ -182,17 +181,19 @@ void decompose_grid_2D_block(){
             }
         }
     }
-        dim[0] = ny;
-        dim[1] = nx;
-        period[0] = period[1] = reorder = 0;
+    
+    // define values used with MPI_CART functions below
+    dim[0] = ny;
+    dim[1] = nx;
+    period[0] = period[1] = reorder = 0;
 
-        // create coordinate system and get coords
-        MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
-        MPI_Cart_coords(com2d, my_rank, 2, coord);
+    // create coordinate system and get coords
+    MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
+    MPI_Cart_coords(com2d, my_rank, 2, coord);
 
-        // find neighbors
-        MPI_Cart_shift(com2d, 1, 1, &left, &right);
-        MPI_Cart_shift(com2d, 0, 1, &down, &up);
+    // find neighbors
+    MPI_Cart_shift(com2d, 1, 1, &left, &right);
+    MPI_Cart_shift(com2d, 0, 1, &down, &up);
     
 
     my_M = M / ny;
@@ -217,7 +218,7 @@ void decompose_grid_horz(){
 
         int error = 0;
 
-    if(my_rank == 0 && PRINT){
+    if(my_rank == 0){
         printf("%d x %d  %dp  Horizontal decomposition\n", N, M, np);
     }
 
@@ -274,7 +275,7 @@ void decompose_grid_horz(){
 void decompose_grid_vert(){
     int error = 0;
 
-    if(my_rank == 0 && PRINT){
+    if(my_rank == 0){
         printf("%d x %d  %dp  Vertical Decomposition\n", N, M, np);
     }
 
@@ -342,7 +343,8 @@ void calculate_vert_boundaries(double *T, double *T_source){
         }
     }
     
-    if(my_N_max == N+1) // along right bound
+    // right
+    if(my_N_max == N+1)
     {
         for(i = 1; i < my_M+1; i++){
             T[my_N*i-1] = T_source[my_N*i-1];
@@ -398,14 +400,13 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
     double norm, max_norm = 0;
     int i,j;
 
-
     for(j=1;j<my_M-1; j++)
     {
         for(i=1;i<my_N-1;i++){
 
             //calculate the differnece vector and compare to current max
             norm = T[my_N*j + i]  -  T_source[my_N*j + i];
-            //printf("T[(%d,%d)]: %f     T_source[]: %f\n", i, j, T[M*i + j], T_source[(M)*(i+my_N_min) + my_M_min + j]);
+
             if(norm < 0)  // get absolute value if negative
                 norm = norm*(-1);
 
@@ -415,7 +416,6 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
                 *j_max = j;
             }
         }
-        //printf("\n");
     }
 
     return max_norm;
@@ -477,11 +477,13 @@ void initialize_arrays(double *T, double *T_prev, double *T_source, double X_MIN
 */
 void swap_rows(double* T)
 {      
-   // printf("%d:  up:%d   down:%d\n", my_rank, up, down);;
-                                       //dest                                //source
+
     MPI_Sendrecv(&T[my_N], 1, x_vector, down, 1, &T[(my_M-1)*my_N], 1, x_vector, up, 1, com2d, &status);                                                 //dest                        source
     MPI_Sendrecv( &T[(my_M-2)*my_N], 1, x_vector, up, 1,&T[0], 1, x_vector, down, 1, com2d, &status);
 }
+
+
+
 /*
     swaps columns with neighboring processes defined by MPI_Cart_create in main()  
 */
@@ -505,10 +507,6 @@ void print_tables(double *T)
     {
         for(i=0;i<my_N;i++)
         {
-            //double * tmp;
-            //tmp = &T[(M-1)*(i+1) + i - j];
-            //printf("  %p  " , tmp);          // prints address
-
             tmp = T[my_N*j + i];
             printf("%.6f ", tmp);
         }
@@ -544,17 +542,17 @@ double jacobi(double *T, double *T_prev, double *T_source)
 {
         double T_largest_change = 0;
 
+        // save time by calculating these values here
         double C = 0.5/(dx*dx+dy*dy);
         double dx2 = dx*dx;
         double dy2 = dy*dy;
         double dx2dy2 = dx2*dy2;
 
-        int x = 0;
         for(int i = 1; i<my_N-1; i++)
         {
             for(int j=1; j<my_M-1; j++)
             {    
-                // calculate new T(i,j) 
+                // calculate new T(i,j)
                 T[my_N*j + i] =  C*((T_prev[my_N*j +i-1]               // left
                                 +    T_prev[my_N*j+i+1])*dy2           // right
                                 +   (T_prev[my_N*(j-1)+i]              // below
@@ -569,12 +567,12 @@ double jacobi(double *T, double *T_prev, double *T_source)
                     if(T_largest_change < 0)
                         T_largest_change*(-1);
                 }
-                x++;
             }
         }
 
     return T_largest_change;
 }
+
 
 
 //
@@ -648,11 +646,9 @@ int main (int argc, char* argv[]){
     double Y_MIN = my_M_min*dy;
     double Y_MAX = my_M_max*dy;
 
-    //my_M = my_M + 2; // this adds an outer layer for boundary conditions or
-    //my_N = my_N + 2; // ghost cells
     
-    printf("my_rank: %d\nmy_N_min: %d  my_N_max: %d   my_M_min: %d   my_M_max: %d\n", my_rank, my_N_min, my_N_max, my_M_min, my_M_max);
-    printf("X_MIN: %f   X_MAX: %f   Y_MIN: %f   Y_MAX: %f  dx: %f   dy: %f\n\n", X_MIN, X_MAX, Y_MIN, Y_MAX, dx,dy);
+    //printf("my_rank: %d\nmy_N_min: %d  my_N_max: %d   my_M_min: %d   my_M_max: %d\n", my_rank, my_N_min, my_N_max, my_M_min, my_M_max);
+    //printf("X_MIN: %f   X_MAX: %f   Y_MIN: %f   Y_MAX: %f  dx: %f   dy: %f\n\n", X_MIN, X_MAX, Y_MIN, Y_MAX, dx,dy);
 
     //printf("\nmy_rank:%d\nmy_M:%d  my_M_min:%d  my_M_max:%d\nmy_N:%d  my_N_min:%d  my_N_max:%d\n\n"
     //    ,my_rank, my_M, my_M_min, my_M_max, my_N, my_N_min, my_N_max);
