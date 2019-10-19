@@ -374,7 +374,7 @@ void fill_array(double *T)
     Calculates and returns the max norm of the difference vectors from T and T_source.
         Also finds the (x,y) location where the max norm occured.
 */
-double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
+double calculate_max_norm(double *T, double *T_source){
     double norm, max_norm = 0;
     int i,j;
 
@@ -390,8 +390,6 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
 
             if(norm > max_norm){
                 max_norm = norm;
-                *i_max = i;
-                *j_max = j;
             }
         }
     }
@@ -401,11 +399,11 @@ double calculate_max_norm(double *T, double *T_source,int *i_max, int *j_max){
 
 
 /*
-     trim the edges off a matrix and return a new one in its place. Not used currently.
+    trim the edges off a matrix and return a new one in its place.
+    not used currently.
 */
 double * trim_matrix_edges(double *T)
 {
-   
     double *Tmp = (double *)calloc(sizeof(double)*(my_M-2)*(my_N-2), sizeof(double));
 
     int i, j;
@@ -430,6 +428,7 @@ double * trim_matrix_edges(double *T)
 extern void VTK_out(const int N, const int M, const double *Xmin, const double *Xmax,
              const double *Ymin, const double *Ymax, const double *T,
              const int index);
+
 
 
 /*
@@ -549,11 +548,6 @@ double jacobi(double *T, double *T_prev, double *T_source)
 
     return T_largest_change;
 }
-
-
-
-//
-//    //   //  // ////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
@@ -684,16 +678,15 @@ int main (int argc, char* argv[]){
     //print_all(T, T_source);
 
    
-    // calculate max norm
-    int i,j; //used to retrieve max norm position 
-    my_max_norm = calculate_max_norm(T,T_source, &i,&j);    
+    // calculate max norm 
+    my_max_norm = calculate_max_norm(T,T_source);    
     
     if(np == 1)
         global_max_norm = my_max_norm;
     else
         MPI_Allreduce(&my_max_norm, &global_max_norm, 1, MPI_DOUBLE, MPI_MAX, com2d);
 
-    // print max_norm and cleanup messages
+    // print info
     if(my_rank == 0){
         printf("\nmax_norm: %.12e\ntime: %fs\niterations: %d\n",global_max_norm, end_time - start_time, iterations);
     }
