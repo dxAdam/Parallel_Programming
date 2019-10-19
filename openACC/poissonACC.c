@@ -253,10 +253,10 @@ clock_t start = clock();
         // copy T to T_prev
         #pragma acc parallel loop gang
         for(int i = 1; i < N-1; i++)
-	{
+	    {
             #pragma acc loop vector
             for(int j = 1; j < N-1; j++)
-	    {
+	        {
                 T_largest_change = fmax( fabs(T[M*i+j]-T_prev[M*i+j]), T_largest_change);
                 T_prev[M*i+j] = T[M*i+j];
             }
