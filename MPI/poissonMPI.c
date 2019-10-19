@@ -545,9 +545,7 @@ double jacobi(double *T, double *T_prev, double *T_source)
                 // calculate T_largest_change
                 if(T[my_N*j + i]-T_prev[my_N*j + i] > T_largest_change)
                 {
-                    T_largest_change = T[my_N*j + i]-T_prev[my_N*j + i];
-                    if(T_largest_change < 0)
-                        T_largest_change*(-1);
+                    T_largest_change = fabs(T[my_N*j + i]-T_prev[my_N*j + i]);
                 }
             }
         }
