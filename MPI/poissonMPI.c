@@ -108,6 +108,8 @@ int my_N_min, my_N_max, my_M_min, my_M_max, nx, ny;
 
 int up, down, left, right; // rank of process in respective direction
 
+
+
 /*
     this function calculates and returns the value of the
       source function S(x,y) = x*exp(y) at (x,y)
@@ -150,32 +152,26 @@ void decompose_grid_2D_block(){
         else if(M % N == 0){ // M is multiple of N
             double m = M;
             double n = N;
-            double p = np;
 
             nx = M / N;
-            ny = p / nx;
+            ny = np / nx;
         }
         else if(N % M == 0){ // N is multiple of M
             double m = M;
             double n = N;
-            double p = np;
 
             ny = N / M;
-            nx = p / ny;
+            nx = np / ny;
         }
         else{
-            // now we need to check that my_M*np==M to make sure   *NOTE: did not finish this part
-            //   we're not losing any of the original matrix
-            if(my_M*np != M){
-                error = 1;
-                MPI_Bcast(&error, 1, MPI_INT, 0, MPI_COMM_WORLD);
-                if(error != 0) {
-                    if(my_rank == 0){
-                        printf("M=%d is not evening divisible by number of processors=%d\n\nprogram will now terminate\n", M, np);
-                    }
+            error = 1;
+            MPI_Bcast(&error, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            if(error != 0) {
+                if(my_rank == 0){
+                    printf("M=%d is not evening divisible by number of processors=%d\n\nprogram will now terminate\n", M, np);
+                }
                 MPI_Finalize();
                 exit(error);
-                }
             }
         }
     }
@@ -216,7 +212,7 @@ void decompose_grid_horz(){
         int error = 0;
 
     if(my_rank == 0){
-        printf("%d x %d  %dp  Horizontal decomposition\n", N, M, np);
+        printf("%d x %d  %dp  Horizontal decomposition\n", M, N, np);
     }
 
     // used with MPI_Cart_create
@@ -227,11 +223,9 @@ void decompose_grid_horz(){
     dx = (GLOBAL_X_MAX - GLOBAL_X_MIN) / (N+1);
     dy = (GLOBAL_Y_MAX - GLOBAL_Y_MIN) / (M+1);
 
-
     my_M = M / np;
    
-    // now we need to check that my_M*np==M to make sure
-    //   we're not losing any of the original matrix
+    // check that np evenly divides M
     if(my_M*np != M){
         error = 1;
         MPI_Bcast(&error, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -244,6 +238,14 @@ void decompose_grid_horz(){
         }
     }
     
+    dim[0] = np;
+    dim[1] = 1;
+    period[0] = period[1] = reorder = 0;
+
+    MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
+    MPI_Cart_shift(com2d, 1, 1, &left, &right);
+    MPI_Cart_shift(com2d, 0, 1, &down, &up);  
+
     my_M_min = my_rank*my_M;
     my_M = my_M + 2;
     my_M_max = my_M_min + my_M - 1;
@@ -251,15 +253,7 @@ void decompose_grid_horz(){
     my_N = N;
     my_N_min = 0;
     my_N = my_N + 2;
-    my_N_max = my_N_min + my_N - 1;
-
-    dim[0] = np;
-    dim[1] = 1;
-    period[0] = period[1] = reorder = 0;
-
-    MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
-    MPI_Cart_shift(com2d, 1, 1, &left, &right);
-    MPI_Cart_shift(com2d, 0, 1, &down, &up);   
+    my_N_max = my_N_min + my_N - 1; 
 }
 
 
@@ -270,7 +264,7 @@ void decompose_grid_vert(){
     int error = 0;
 
     if(my_rank == 0){
-        printf("%d x %d  %dp  Vertical Decomposition\n", N, M, np);
+        printf("%d x %d  %dp  Vertical Decomposition\n", M, N, np);
     }
 
     // used with MPI_Cart_create
@@ -283,9 +277,8 @@ void decompose_grid_vert(){
 
     my_N = N / np;
 
-    // now we need to check that my_N*np == N to make sure
-    //   we're not losing any of the original matrix
-    if(my_N*np != N){
+    // Check that np evenly divides N
+    if(N % np){
         error = 1;
         MPI_Bcast(&error, 1, MPI_INT, 0, MPI_COMM_WORLD);
         if(error != 0) {
@@ -297,6 +290,13 @@ void decompose_grid_vert(){
         }
     }
     
+    dim[0] = 1;    // rows
+    dim[1] = np;   // cols
+    period[0] = period[1] = reorder = 0;
+    
+    MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
+    MPI_Cart_shift(com2d, 1, 1, &left, &right);
+    MPI_Cart_shift(com2d, 0, 1, &down, &up);
     my_M = M;
     my_M_min = 0;
     my_M = my_M + 2;
@@ -305,14 +305,6 @@ void decompose_grid_vert(){
     my_N_min = my_rank*my_N;
     my_N = my_N + 2;
     my_N_max = my_N_min + my_N - 1;
-
-    dim[0] = 1;    // rows
-    dim[1] = np;   // cols
-    period[0] = period[1] = reorder = 0;
-    
-    MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
-    MPI_Cart_shift(com2d, 1, 1, &left, &right);
-    MPI_Cart_shift(com2d, 0, 1, &down, &up);
 }
 
 
