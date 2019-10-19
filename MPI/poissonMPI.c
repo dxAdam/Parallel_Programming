@@ -24,7 +24,7 @@
 /*
     Usage:
 
-        mpirun -np <p> poissonMPI <N> <M> <P> <I>
+        mpirun -np <p> poissonMPI <M> <N> <P> <I>
 
             <p> - number of processors
 
@@ -69,7 +69,7 @@
         T(0,y) = 0             (left)
         T(2,y) = 2*exp(y)      (right)
         T(x,0) = x             (bottom)
-        T(x,1) = x*exp(1)        (top)
+        T(x,1) = x*exp(1)      (top)
 
     
     Grid Layout:
@@ -96,8 +96,6 @@ double GLOBAL_Y_MIN = 0;
 double GLOBAL_Y_MAX = 1;
 
 double dx, dy;
-
-char DEBUG = 1; // DEBUG == 1 prints extra information useful for debugging
             
 MPI_Status status;
 MPI_Datatype x_vector, y_vector;
@@ -207,7 +205,6 @@ void decompose_grid_2D_block(){
 
     my_M_max = my_M_min + my_M - 1;
     my_N_max = my_N_min + my_N - 1;
-
 }
 
 
@@ -248,7 +245,6 @@ void decompose_grid_horz(){
     }
     
     my_M_min = my_rank*my_M;
-
     my_M = my_M + 2;
     my_M_max = my_M_min + my_M - 1;
 
@@ -257,15 +253,13 @@ void decompose_grid_horz(){
     my_N = my_N + 2;
     my_N_max = my_N_min + my_N - 1;
 
-
     dim[0] = np;
     dim[1] = 1;
     period[0] = period[1] = reorder = 0;
 
     MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
     MPI_Cart_shift(com2d, 1, 1, &left, &right);
-    MPI_Cart_shift(com2d, 0, 1, &down, &up);
-    
+    MPI_Cart_shift(com2d, 0, 1, &down, &up);   
 }
 
 
@@ -302,18 +296,15 @@ void decompose_grid_vert(){
             exit(error);
         }
     }
-
-    my_N_min = my_rank*my_N;
-    my_N = my_N + 2;
-    my_N_max = my_N_min + my_N - 1;
     
-
     my_M = M;
     my_M_min = 0;
     my_M = my_M + 2;
     my_M_max = my_M_min + my_M - 1;
 
-
+    my_N_min = my_rank*my_N;
+    my_N = my_N + 2;
+    my_N_max = my_N_min + my_N - 1;
 
     dim[0] = 1;    // rows
     dim[1] = np;   // cols
@@ -322,9 +313,6 @@ void decompose_grid_vert(){
     MPI_Cart_create(MPI_COMM_WORLD,2,dim,period,reorder,&com2d);
     MPI_Cart_shift(com2d, 1, 1, &left, &right);
     MPI_Cart_shift(com2d, 0, 1, &down, &up);
-    
-    
-    
 }
 
 
