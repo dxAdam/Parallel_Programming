@@ -1,5 +1,5 @@
-## MPI
+# MPI
 
-# Status: working
+## Status: working
 
 See poissonMPI.c for usage instructions

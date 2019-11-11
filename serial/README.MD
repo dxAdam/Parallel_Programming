@@ -1,5 +1,5 @@
-## Serial
+# Serial
 
-# Status: working
+## Status: working
 
 See poissonSerial.c for usage instructions

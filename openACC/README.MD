@@ -1,5 +1,5 @@
-## openACC
+# openACC
 
-# Status: working
+## Status: working
 
 See poissonACC.c for usage instructions

@@ -1,5 +1,5 @@
-## openMP
+# openMP
 
-# Status: working
+## Status: working
 
 See poissonOMP.c for usage instructions
