@@ -168,7 +168,7 @@ int main(int argc, char *argv[2])
 
     int iterations_count      = 0;
     int max_iterations        = 1e6;
-    double target_convergence = 10e-12;
+    double target_convergence = 1e-12;
     double T_largest_change   = target_convergence + 1; // must start > target_convergence
 
     // find dx and dy from boundary conditions and input
