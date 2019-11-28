@@ -261,11 +261,7 @@ void *jacobi(void *args){
             mtx.unlock();
         }
   
-
-
         pthread_barrier_wait(&barrier);
-
- 
     }  
  
     if(*id==0){
@@ -283,6 +279,8 @@ void *jacobi(void *args){
         printf("iterations: %d\n", iterations_count);
         printf("max norm: %.12e at (%d,%d)\n", max_norm, i_max, j_max);
     }
+
+    return NULL;
 }
 
 
@@ -367,4 +365,5 @@ int main(int argc, char *argv[2])
     free(T);
     free(T_source);
     free(T_prev);
+
 }
