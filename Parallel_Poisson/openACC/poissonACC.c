@@ -45,7 +45,7 @@
     
     Grid Layout:
 
-        example: M x N = 5 X 4 
+        example: M x N = 6 X 4 
 
     (0,0)____________ i=N__x    * When we print, we mirror the x-axis so the
         |[ 0][ 1][ 2][ 3]         plot appears with 23 on the top right corner
